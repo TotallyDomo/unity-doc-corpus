@@ -18,7 +18,12 @@ Unity 6000.3 offline documentation, reference build (reproduce with the benchmar
 | Source HTML | 648 MB |
 | Derived Markdown | 76 MB (11.7% of source bytes) |
 | Full corpus build | under a minute wall clock (8 workers) |
-| Recall benchmark | TBD - populated from `benchmark-report-expanded.json` |
+| Top-10 recall, SQLite FTS5 | 91.9% (926/1008 cases) |
+| Top-10 recall, grepping the raw HTML | 57.1% (576/1008 cases), ~42x slower (~292 ms vs ~7 ms per query) |
+
+Benchmark cases are 8 curated lookups plus 1000 generated from page titles and page ids; a
+case counts as recalled when the expected page appears in the top 10 results. Reproduce with
+`bin/unity-doc-corpus-benchmark --source unity-docs --corpus unity-docs/_agent --generated-cases 1000`.
 
 Why this matters for agents: documentation lookups happen inside a context window billed per
 token. An ~88% byte reduction per page - with a recorded source path and SHA-256 for every
@@ -34,6 +39,10 @@ HTML.
    index (`docs.sqlite`), and an exact-name lookup table (`search_index.tsv`).
 3. Agents query the derived corpus and verify load-bearing claims against the untouched
    originals.
+
+Scope: the corpus contains what Unity's offline zip contains - the Manual and the Scripting
+API reference. Some package manuals (URP, for example) are bundled into the Unity Manual;
+most package API reference (`com.unity.*`) ships separately per package and is not included.
 
 The builder is Unity-specific; the pattern is not - a write-up on the generic
 searchable-docs -> offline-fetch -> agent-transform -> router-skill shape is planned (see
@@ -60,7 +69,7 @@ bin/unity-doc-corpus fetch --version 6000.3
 # 3. Build the derived corpus (writes unity-docs/_agent)
 bin/unity-doc-corpus build --source unity-docs --output unity-docs/_agent
 
-# 4. Try a lookup
+# 4. Try a lookup (no sqlite3 CLI? Python's built-in sqlite3 module runs the same query)
 sqlite3 unity-docs/_agent/docs.sqlite "SELECT p.title, p.md_rel FROM pages_fts f JOIN pages p ON p.page_key = f.page_key WHERE pages_fts MATCH 'addressables memory' ORDER BY bm25(pages_fts) LIMIT 5;"
 ```
 

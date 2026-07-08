@@ -14,6 +14,11 @@ marker file plus `manifest.json`, `search_index.tsv`, `docs.sqlite`, and `text/`
 root is known or present, ask the user to run the builder quickstart first (one-time ~300 MB
 fetch plus a fast local build); do not build it unprompted.
 
+Scope: the corpus holds Unity's Manual and Scripting API reference (what the official offline
+zip contains). Some package manuals (URP, for example) are bundled into the Manual, but most
+package API reference (`com.unity.*`) is not included - if a package-API lookup comes up
+empty, say the corpus does not cover it rather than concluding the API does not exist.
+
 ## Lookup order
 
 1. Once per session, read `manifest.json` and note the corpus Unity version. If the question
