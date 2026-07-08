@@ -1,0 +1,13 @@
+# Unity documentation data (fetched zip contents + derived corpus).
+# Never committed - users fetch Unity's official offline docs themselves.
+/unity-docs/
+
+# Local build outputs - the repo ships source + build recipe only.
+/bin/
+*.exe
+
+# Corpus baselines for compare runs.
+/.cache/
+
+# Python bytecode.
+__pycache__/
