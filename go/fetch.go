@@ -74,7 +74,7 @@ func fetch(version, destination, cacheRoot string, force, resolveOnly bool) erro
 	extractPath := filepath.Join(cacheAbs, version+"-expanded")
 
 	if _, err := os.Stat(zipPath); err != nil {
-		fmt.Fprintf(os.Stderr, "Downloading about 300MB to %s\n", zipPath)
+		fmt.Fprintf(os.Stderr, "Downloading to %s\n", zipPath)
 		if err := downloadFile(zipURL, zipPath); err != nil {
 			return err
 		}
@@ -150,6 +150,9 @@ func downloadFile(url, dest string) error {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download failed: %s -> HTTP %d", url, resp.StatusCode)
+	}
+	if resp.ContentLength > 0 {
+		fmt.Fprintf(os.Stderr, "Download size: %d MB\n", resp.ContentLength/(1000*1000))
 	}
 	tmp := dest + ".part"
 	out, err := os.Create(tmp)

@@ -27,8 +27,8 @@ Run all commands from the repository root. Invocations are written suffix-less
    Append `.exe` to the `-o` names on Windows, or use the wrapper:
    `powershell -ExecutionPolicy Bypass -File scripts/build.ps1`
 
-2. Fetch the offline docs for the requested Unity version stream (~300 MB download from
-   Unity's official hosts):
+2. Fetch the offline docs for the requested Unity version stream (a several-hundred-MB
+   download from Unity's official hosts; ~475 MB for 6000.3):
 
    ```
    bin/unity-doc-corpus fetch --version 6000.3

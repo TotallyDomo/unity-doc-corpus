@@ -11,8 +11,8 @@ builder skill. All reads are local; nothing is fetched.
 The corpus root is the builder's `--output` directory - by default `unity-docs/_agent` under
 the repository where the builder ran. A valid corpus root contains a `.unity-doc-agent-corpus`
 marker file plus `manifest.json`, `search_index.tsv`, `docs.sqlite`, and `text/`. If no corpus
-root is known or present, ask the user to run the builder quickstart first (one-time ~300 MB
-fetch plus a fast local build); do not build it unprompted.
+root is known or present, ask the user to run the builder quickstart first (a one-time
+several-hundred-MB fetch plus a fast local build); do not build it unprompted.
 
 Scope: the corpus holds Unity's Manual and Scripting API reference (what the official offline
 zip contains). Some package manuals (URP, for example) are bundled into the Manual, but most

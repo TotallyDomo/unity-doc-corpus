@@ -63,7 +63,7 @@ go build -trimpath -o ../bin/unity-doc-corpus-benchmark ./cmd/benchmark
 cd ..
 # Windows: append .exe to the -o names, or run scripts/build.ps1
 
-# 2. Fetch Unity's official offline docs (~300 MB, one-time per version)
+# 2. Fetch Unity's official offline docs (one-time per version; ~475 MB for 6000.3)
 bin/unity-doc-corpus fetch --version 6000.3
 
 # 3. Build the derived corpus (writes unity-docs/_agent)
