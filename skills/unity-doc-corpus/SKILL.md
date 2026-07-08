@@ -35,8 +35,10 @@ Run all commands from the repository root. Invocations are written suffix-less
    ```
 
    `--destination` defaults to `unity-docs`; `--resolve-only` prints the resolved zip URL
-   without downloading; `--force` re-fetches; the download cache defaults to
-   `<os-temp>/unity-doc-downloads`.
+   without downloading; `--force` replaces an existing destination directory (the downloaded
+   zip is still reused from the cache); the download cache defaults to
+   `<os-temp>/unity-doc-downloads` - point `--cache-root` elsewhere or delete it to force a
+   re-download.
 
 3. Build or refresh the derived corpus:
 
