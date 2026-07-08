@@ -4,7 +4,7 @@ Turn Unity's official offline documentation into an agent-optimized local search
 stripped Markdown, SQLite FTS5 full-text search, and a benchmarked lookup path - built
 entirely on your machine by a pure-Go (CGO-free) tool.
 
-No documentation content lives in this repository, and none ever has: you fetch Unity's
+No documentation content lives in this repository: you fetch Unity's
 official offline docs zip yourself, and the builder derives the corpus locally. The repo
 ships tooling and agent skills only.
 
@@ -104,7 +104,7 @@ yourself; the derived corpus stays on your machine.
 
 ## Support
 
-Built for my own workflow and shared as-is. PRs welcome; no support promised.
+Built for my own workflow. Will provide occasional updates if needed.
 
 ## License
 
