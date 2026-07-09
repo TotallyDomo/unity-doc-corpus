@@ -65,9 +65,9 @@ go build -trimpath -o ../bin/unity-doc-corpus .
 go build -trimpath -o ../bin/unity-doc-corpus-benchmark ./cmd/benchmark
 cd ..
 # Windows: `go build` does NOT add .exe to an explicit -o name, so append .exe to both -o
-# paths above (e.g. -o ../bin/unity-doc-corpus.exe) - otherwise the binary won't run.
-# `scripts\build.ps1` does both builds for you, but stock Windows blocks .ps1 scripts; if so,
-# run it as:  powershell -ExecutionPolicy Bypass -File scripts\build.ps1
+# paths above (e.g. -o ../bin/unity-doc-corpus.exe) - otherwise the binary won't run. This
+# raw go build is the no-setup path. (scripts\build.ps1 does the same, if you already allow
+# local PowerShell script execution.)
 
 # 2. Fetch Unity's official offline docs (one-time per version; ~475 MB for 6000.3).
 #    The zip is deleted after extraction to save space; add --keep-zip to cache it.
