@@ -10,8 +10,10 @@ stripped Markdown, JSONL metadata, SQLite FTS5 index, exact-name lookup TSV, and
 reports. This is the expensive, explicitly-triggered maintenance workflow; day-to-day doc
 lookups belong to the `unity-docs` skill.
 
-Run all commands from the repository root. Invocations are written suffix-less
-(`bin/unity-doc-corpus`); on Windows they resolve to the `.exe` automatically.
+Run all commands from the repository root. If the repository is not present locally (for
+example when only the skills were installed from a marketplace), clone it first:
+`git clone https://github.com/TotallyDomo/unity-doc-corpus`. Invocations are written
+suffix-less (`bin/unity-doc-corpus`); on Windows they resolve to the `.exe` automatically.
 
 ## Workflow
 
