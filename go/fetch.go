@@ -30,7 +30,10 @@ var sectionDirs = []string{"Manual", "ScriptReference"}
 
 var httpClient = &http.Client{Timeout: 30 * time.Minute}
 
-var zipURLRe = regexp.MustCompile(`https://cloudmedia-docs\.unity3d\.com/docscloudstorage/en/[^"]+/UnityDocumentation\.zip`)
+// Offline docs zips live in Unity's docscloudstorage bucket, served from two hosts: the
+// cloudmedia CDN for current streams (2020.3+) and the GCS bucket directly for older ones
+// (2019.4 and older link storage.googleapis.com from their OfflineDocumentation pages).
+var zipURLRe = regexp.MustCompile(`https://(?:cloudmedia-docs\.unity3d\.com/docscloudstorage/en|storage\.googleapis\.com/docscloudstorage)/[^"]+/UnityDocumentation\.zip`)
 
 func runFetch(args []string) {
 	fs := flag.NewFlagSet("fetch", flag.ExitOnError)
@@ -129,27 +132,50 @@ func fetch(version, destination, cacheRoot string, workers int, force, keepZip, 
 // is absent. The download step still validates the URL, so a wrong guess fails loudly there.
 func resolveZipURL(version string) (string, error) {
 	pageURL := fmt.Sprintf("https://docs.unity3d.com/%s/Documentation/Manual/OfflineDocumentation.html", version)
-	fallback := fmt.Sprintf("https://cloudmedia-docs.unity3d.com/docscloudstorage/en/%s/UnityDocumentation.zip", version)
+	// Both candidate locations are inside Unity's docscloudstorage bucket; some old streams
+	// (e.g. 5.6) have no OfflineDocumentation page anymore but still serve the zip from GCS.
+	candidates := []string{
+		fmt.Sprintf("https://cloudmedia-docs.unity3d.com/docscloudstorage/en/%s/UnityDocumentation.zip", version),
+		fmt.Sprintf("https://storage.googleapis.com/docscloudstorage/%s/UnityDocumentation.zip", version),
+	}
 	fmt.Fprintln(os.Stderr, "Resolving", pageURL)
 	resp, err := httpClient.Get(pageURL)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "warning: resolution page unreachable, using fallback URL:", err)
-		return fallback, nil
+		fmt.Fprintln(os.Stderr, "warning: resolution page unreachable, probing known zip locations:", err)
+		return probeZipCandidates(candidates)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		fmt.Fprintf(os.Stderr, "warning: resolution page returned HTTP %d, using fallback URL\n", resp.StatusCode)
-		return fallback, nil
+		fmt.Fprintf(os.Stderr, "warning: resolution page returned HTTP %d, probing known zip locations\n", resp.StatusCode)
+		return probeZipCandidates(candidates)
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "warning: could not read resolution page, using fallback URL:", err)
-		return fallback, nil
+		fmt.Fprintln(os.Stderr, "warning: could not read resolution page, probing known zip locations:", err)
+		return probeZipCandidates(candidates)
 	}
 	if m := zipURLRe.Find(body); m != nil {
 		return string(m), nil
 	}
-	return fallback, nil
+	return probeZipCandidates(candidates)
+}
+
+// probeZipCandidates HEAD-checks the known zip locations in order and returns the first that
+// exists. When none respond it still returns the first candidate so the download step fails
+// loudly with a concrete URL instead of hiding the problem here.
+func probeZipCandidates(candidates []string) (string, error) {
+	for _, u := range candidates {
+		resp, err := httpClient.Head(u)
+		if err != nil {
+			continue
+		}
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			return u, nil
+		}
+	}
+	fmt.Fprintln(os.Stderr, "warning: no known zip location responded for this version; trying", candidates[0])
+	return candidates[0], nil
 }
 
 func downloadFile(url, dest string) error {

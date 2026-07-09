@@ -32,9 +32,10 @@ HTML.
 
 ## How it works
 
-1. `fetch` downloads Unity's official offline docs zip (only from `docs.unity3d.com` /
-   `cloudmedia-docs.unity3d.com`) and extracts just the Manual and Scripting API reference
-   from it - the parts the corpus is built from - in parallel, straight to disk.
+1. `fetch` downloads Unity's official offline docs zip (only from `docs.unity3d.com` and
+   Unity's `docscloudstorage` bucket) and extracts just the Manual and Scripting API
+   reference from it - the parts the corpus is built from - in parallel, straight to disk.
+   Any stream Unity publishes offline docs for works; zips exist back to at least 5.6.
 2. `build` walks the Manual and ScriptReference HTML and derives, per page: stripped
    Markdown (`text/`), metadata with source path and SHA-256 (`pages.jsonl`), a SQLite FTS5
    index (`docs.sqlite`), and an exact-name lookup table (`search_index.tsv`).
@@ -111,10 +112,11 @@ still built once via the Quickstart above.
 
 ## Trust surface
 
-- **Network**: `fetch` talks only to Unity's official documentation hosts
-  (`docs.unity3d.com` to resolve the zip URL, `cloudmedia-docs.unity3d.com` for the zip
-  itself; both pinned in `go/fetch.go`). Nothing else fetches anything at runtime; the
-  lookup skill is pure local reads.
+- **Network**: `fetch` talks only to Unity's official documentation locations, all pinned
+  in `go/fetch.go`: `docs.unity3d.com` to resolve the zip URL, and Unity's
+  `docscloudstorage` bucket for the zip itself - via `cloudmedia-docs.unity3d.com` (current
+  streams) or `storage.googleapis.com/docscloudstorage/` (2019.4 and older). Nothing else
+  fetches anything at runtime; the lookup skill is pure local reads.
 - **Executes**: the two Go binaries you build from this repo's source, plus optional local
   Python scripts. No prebuilt binaries, no piped installers, no hooks.
 - **Data egress**: none.

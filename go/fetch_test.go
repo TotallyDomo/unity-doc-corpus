@@ -146,3 +146,24 @@ func TestFindSectionPrefix(t *testing.T) {
 		t.Errorf("prefix = %q, want %q", prefix, "root/")
 	}
 }
+
+func TestZipURLReMatchesBothBucketHosts(t *testing.T) {
+	matches := map[string]string{
+		`<a href="https://cloudmedia-docs.unity3d.com/docscloudstorage/en/6000.3/UnityDocumentation.zip">`: "https://cloudmedia-docs.unity3d.com/docscloudstorage/en/6000.3/UnityDocumentation.zip",
+		`<a href="https://storage.googleapis.com/docscloudstorage/2019.4/UnityDocumentation.zip">`:         "https://storage.googleapis.com/docscloudstorage/2019.4/UnityDocumentation.zip",
+	}
+	for page, want := range matches {
+		if got := zipURLRe.FindString(page); got != want {
+			t.Fatalf("zipURLRe on %q = %q, want %q", page, got, want)
+		}
+	}
+	rejected := []string{
+		`<a href="https://evil.example.com/docscloudstorage/en/6000.3/UnityDocumentation.zip">`,
+		`<a href="https://storage.googleapis.com/otherbucket/2019.4/UnityDocumentation.zip">`,
+	}
+	for _, page := range rejected {
+		if got := zipURLRe.FindString(page); got != "" {
+			t.Fatalf("zipURLRe matched untrusted URL %q in %q", got, page)
+		}
+	}
+}

@@ -54,9 +54,11 @@ below shows, is also much worse at actually finding the right page.
 ### Pipeline
 
 1. **fetch** resolves the offline-docs zip URL from `docs.unity3d.com` and downloads it
-   from `cloudmedia-docs.unity3d.com` - both hosts pinned in `go/fetch.go`; nothing else
-   is ever fetched - then extracts just the `Manual/` and `ScriptReference/` subtrees (the
-   only parts `build` reads) in a parallel worker pool, straight to the destination.
+   from Unity's `docscloudstorage` bucket - `cloudmedia-docs.unity3d.com` for current
+   streams, `storage.googleapis.com/docscloudstorage/` for 2019.4 and older; all locations
+   pinned in `go/fetch.go` and nothing else is ever fetched - then extracts just the
+   `Manual/` and `ScriptReference/` subtrees (the only parts `build` reads) in a parallel
+   worker pool, straight to the destination.
 2. **build** walks the `Manual/` and `ScriptReference/` HTML trees and transforms every
    page in a worker pool (default: half the logical CPUs). Output order is deterministic:
    files are discovered in sorted order and results are written by job index, so two

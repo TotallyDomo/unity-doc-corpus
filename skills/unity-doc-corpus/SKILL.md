@@ -78,9 +78,11 @@ verification step depends on them.
 
 ## Trust surface
 
-- Network: `fetch` downloads only from Unity's official documentation hosts
-  (`docs.unity3d.com` resolves the zip URL; `cloudmedia-docs.unity3d.com` serves the zip -
-  both pinned in `go/fetch.go`). Nothing else is fetched at runtime.
+- Network: `fetch` downloads only from Unity's official documentation locations, all pinned
+  in `go/fetch.go`: `docs.unity3d.com` resolves the zip URL; the zip itself comes from
+  Unity's `docscloudstorage` bucket via `cloudmedia-docs.unity3d.com` (current streams) or
+  `storage.googleapis.com/docscloudstorage/` (2019.4 and older). Nothing else is fetched at
+  runtime.
 - Executes: the two Go binaries you build from this repository's source, plus the optional
   local Python maintenance scripts.
 - Data egress: none. Everything runs and stays on the local machine.
