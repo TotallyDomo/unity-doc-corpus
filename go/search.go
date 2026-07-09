@@ -55,7 +55,17 @@ func searchCorpus(corpusDir, query string, limit int) ([]searchHit, error) {
 	}
 	dbPath := filepath.Join(corpusDir, "docs.sqlite")
 	if _, err := os.Stat(dbPath); err != nil {
-		return nil, fmt.Errorf("no corpus database at %s - run the builder quickstart first (fetch then build)", dbPath)
+		absDB, aerr := filepath.Abs(dbPath)
+		if aerr != nil {
+			absDB = dbPath
+		}
+		// For the default layout the docs root is the corpus dir's parent; point the user at
+		// the exact step they are missing instead of the whole quickstart.
+		srcRoot := filepath.Dir(filepath.Clean(corpusDir))
+		if _, serr := os.Stat(filepath.Join(srcRoot, "Manual")); serr == nil {
+			return nil, fmt.Errorf("no corpus database at %s\nthe docs are fetched but the corpus is not built yet - run:\n  bin/unity-doc-corpus build --source %s --output %s", absDB, srcRoot, corpusDir)
+		}
+		return nil, fmt.Errorf("no corpus database at %s - run the quickstart first:\n  bin/unity-doc-corpus fetch --version <ver>\n  bin/unity-doc-corpus build --source %s --output %s", absDB, srcRoot, corpusDir)
 	}
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {

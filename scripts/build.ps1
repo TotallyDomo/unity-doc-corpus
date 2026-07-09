@@ -33,7 +33,7 @@ New-Item -ItemType Directory -Force $OutDir | Out-Null
 Push-Location $GoRoot
 try {
     Invoke-GoStep "go build" @("build", "-trimpath", "-ldflags=-s -w", "-o", $Exe, ".")
-    Invoke-GoStep "go build (benchmark)" @("build", "-trimpath", "-ldflags=-s -w", "-o", $BenchmarkExe, ".\cmd\benchmark")
+    Invoke-GoStep "go build (benchmark)" @("build", "-trimpath", "-ldflags=-s -w", "-o", $BenchmarkExe, ".\cmd\unity-doc-corpus-benchmark")
 }
 finally {
     Pop-Location

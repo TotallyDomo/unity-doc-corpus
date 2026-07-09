@@ -114,7 +114,7 @@ fetch. The lookup skill performs no network access at all.
 ## Benchmark
 
 Claims about "better lookup" are cheap; the benchmark binary
-(`go/cmd/benchmark`) makes them measurable and reproducible:
+(`go/cmd/unity-doc-corpus-benchmark`) makes them measurable and reproducible:
 
 ```
 bin/unity-doc-corpus-benchmark --source unity-docs --corpus unity-docs/_agent --generated-cases 1000

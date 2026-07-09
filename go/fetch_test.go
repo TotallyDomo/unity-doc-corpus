@@ -38,11 +38,11 @@ func TestExtractSectionsSelective(t *testing.T) {
 	tmp := t.TempDir()
 	zipPath := filepath.Join(tmp, "docs.zip")
 	writeTestZip(t, zipPath, map[string]string{
-		"UnityDocs/Documentation/en/Manual/Intro.html":            "<html>manual</html>",
-		"UnityDocs/Documentation/en/Manual/docdata/index.json":    `{"pages":[["Intro","Introduction"]]}`,
-		"UnityDocs/Documentation/en/ScriptReference/Foo.html":     "<html>ref</html>",
-		"UnityDocs/Documentation/en/uploads/asset.bin":            "binary",
-		"UnityDocs/Documentation/en/StaticFiles/style.css":        "body{}",
+		"UnityDocs/Documentation/en/Manual/Intro.html":         "<html>manual</html>",
+		"UnityDocs/Documentation/en/Manual/docdata/index.json": `{"pages":[["Intro","Introduction"]]}`,
+		"UnityDocs/Documentation/en/ScriptReference/Foo.html":  "<html>ref</html>",
+		"UnityDocs/Documentation/en/uploads/asset.bin":         "binary",
+		"UnityDocs/Documentation/en/StaticFiles/style.css":     "body{}",
 	})
 
 	dest := filepath.Join(tmp, "dest")
@@ -129,9 +129,9 @@ func TestFindSectionPrefix(t *testing.T) {
 	tmp := t.TempDir()
 	zipPath := filepath.Join(tmp, "docs.zip")
 	writeTestZip(t, zipPath, map[string]string{
-		"root/Manual/Intro.html":                     "m",
-		"root/ScriptReference/Foo.html":              "s",
-		"root/Manual/ScriptReference/nested/x.html":  "nested-noise",
+		"root/Manual/Intro.html":                    "m",
+		"root/ScriptReference/Foo.html":             "s",
+		"root/Manual/ScriptReference/nested/x.html": "nested-noise",
 	})
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {

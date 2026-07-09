@@ -119,8 +119,8 @@ func fetch(version, destination, cacheRoot string, workers int, force, keepZip, 
 		}
 	}
 
-	fmt.Fprintln(os.Stderr, "Done. Source root for the corpus builder:", destAbs)
-	fmt.Println(destAbs)
+	fmt.Fprintln(os.Stderr, "Done. Docs extracted to:", destAbs)
+	fmt.Fprintf(os.Stderr, "Next: bin/unity-doc-corpus build --source %s --output %s\n", destination, destination+"/_agent")
 	return nil
 }
 

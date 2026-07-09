@@ -53,31 +53,37 @@ router-skill shape is planned.
 
 ## Quickstart
 
-Requires Go 1.26+. Python 3 is optional (maintenance benchmarks only).
+Requires Go 1.26+. Python 3 is optional (maintenance benchmarks only). The same four steps
+work as written on Windows, macOS, and Linux; every command runs from the repository root.
+
+**1. Build the tools from source** (no prebuilt binaries are shipped):
 
 ```
 git clone https://github.com/TotallyDomo/unity-doc-corpus
 cd unity-doc-corpus
+go build -C go -trimpath -o ../bin/ .
+go build -C go -trimpath -o ../bin/ ./cmd/unity-doc-corpus-benchmark
+```
 
-# 1. Build the tools from source (no prebuilt binaries are shipped)
-cd go
-go build -trimpath -o ../bin/unity-doc-corpus .
-go build -trimpath -o ../bin/unity-doc-corpus-benchmark ./cmd/benchmark
-cd ..
-# Windows: `go build` does NOT add .exe to an explicit -o name, so append .exe to both -o
-# paths above (e.g. -o ../bin/unity-doc-corpus.exe) - otherwise the binary won't run. This
-# raw go build is the no-setup path. (scripts\build.ps1 does the same, if you already allow
-# local PowerShell script execution.)
+Go names the binaries itself (`.exe` included on Windows) and writes them to `bin/`.
+`scripts/build.ps1` is the equivalent for PowerShell-script workflows.
 
-# 2. Fetch Unity's official offline docs (one-time per version; ~475 MB for 6000.3).
-#    The zip is deleted after extraction to save space; add --keep-zip to cache it.
+**2. Fetch Unity's official offline docs** (one-time per version; ~475 MB for 6000.3; the
+zip is deleted after extraction - add `--keep-zip` to cache it):
+
+```
 bin/unity-doc-corpus fetch --version 6000.3
+```
 
-# 3. Build the derived corpus (writes unity-docs/_agent)
+**3. Build the derived corpus** (writes `unity-docs/_agent`, takes under a minute):
+
+```
 bin/unity-doc-corpus build --source unity-docs --output unity-docs/_agent
+```
 
-# 4. Try a lookup - built-in FTS5 search, no sqlite3 CLI or Python needed
-#    (Windows: bin\unity-doc-corpus.exe search ...)
+**4. Look something up** - built-in FTS5 search, no sqlite3 CLI or Python needed:
+
+```
 bin/unity-doc-corpus search "addressables memory"
 ```
 
@@ -90,9 +96,18 @@ Two Claude Code skills live under `skills/`:
 - **`unity-doc-corpus`** - builder/maintenance. Fetch, build, refresh, compare, benchmark.
   Expensive and explicitly triggered; never fires on ordinary doc questions.
 
-Install with `npx skills add TotallyDomo/unity-doc-corpus` (both skills), or add
-`--skill unity-docs` for lookup only. The corpus itself is still built once via the
-Quickstart above.
+Install both skills for Claude Code with:
+
+```
+npx skills add TotallyDomo/unity-doc-corpus --skill "*" --agent claude-code --copy -y
+```
+
+The explicit flags are deliberate: the CLI's interactive selector makes it easy to install
+only one of the two skills, and on Windows its default symlink install can fail silently,
+leaving the skills only under `.agents/skills/` - a directory Claude Code does not read.
+`--copy` writes real files into `.claude/skills/` instead. Use `--skill unity-docs` for
+lookup only, or `-g` to install user-globally rather than per-project. The corpus itself is
+still built once via the Quickstart above.
 
 ## Trust surface
 

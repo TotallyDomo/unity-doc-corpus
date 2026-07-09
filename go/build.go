@@ -265,6 +265,12 @@ func build(source, output string, workers int) error {
 		return err
 	}
 	os.Stdout.Write(manifestBytes)
+	fmt.Fprintf(os.Stderr, "Corpus built: %d pages -> %s\n", pageCount, outputAbs)
+	searchCmd := "bin/unity-doc-corpus search"
+	if filepath.Clean(output) != filepath.Clean(defaultCorpusDir) {
+		searchCmd += " --corpus " + output
+	}
+	fmt.Fprintf(os.Stderr, "Try: %s \"rigidbody interpolation\"\n", searchCmd)
 	return nil
 }
 
