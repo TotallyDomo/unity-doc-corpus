@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -45,9 +46,11 @@ type caseResult struct {
 	SourceOK    bool
 	DerivedOK   bool
 	SQLiteOK    bool
+	RawFTSOK    bool
 	SourceTime  time.Duration
 	DerivedTime time.Duration
 	SQLiteTime  time.Duration
+	RawFTSTime  time.Duration
 }
 
 var defaultCases = []benchCase{
@@ -190,7 +193,80 @@ func sqliteHits(corpus, query string) ([]string, time.Duration) {
 	}
 	defer db.Close()
 	terms := tokenize(query, true)
-	rows, err := db.Query("SELECT p.source_rel FROM pages_fts JOIN pages p ON p.page_key = pages_fts.page_key WHERE pages_fts MATCH ? ORDER BY bm25(pages_fts) LIMIT 10", strings.Join(terms, " "))
+	rows, err := db.Query("SELECT p.source_rel FROM pages_fts JOIN pages p ON p.page_key = pages_fts.page_key WHERE pages_fts MATCH ? ORDER BY bm25(pages_fts, 0.0, 10.0, 1.0) LIMIT 10", strings.Join(terms, " "))
+	if err != nil {
+		return nil, time.Since(start)
+	}
+	defer rows.Close()
+	var hits []string
+	for rows.Next() {
+		var sourceRel string
+		if rows.Scan(&sourceRel) == nil {
+			hits = append(hits, sourceRel)
+		}
+	}
+	return hits, time.Since(start)
+}
+
+var titleRe = regexp.MustCompile(`(?is)<title>(.*?)</title>`)
+
+func extractHTMLTitle(text string) string {
+	m := titleRe.FindStringSubmatch(text)
+	if m == nil {
+		return ""
+	}
+	return strings.Join(strings.Fields(html.UnescapeString(m[1])), " ")
+}
+
+// buildRawFTSIndex indexes the raw, untransformed HTML into a throwaway FTS5 database:
+// the (bm25, raw HTML) cell of the ranker x representation matrix. Ranker settings are
+// identical to the shipped corpus lane so the two differ only in representation.
+func buildRawFTSIndex(docs []doc) (string, time.Duration, error) {
+	start := time.Now()
+	f, err := os.CreateTemp("", "unity-raw-fts-*.sqlite")
+	if err != nil {
+		return "", 0, err
+	}
+	path := f.Name()
+	f.Close()
+	os.Remove(path)
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return "", 0, err
+	}
+	defer db.Close()
+	if _, err := db.Exec("CREATE VIRTUAL TABLE raw_fts USING fts5(source_rel UNINDEXED, title, body)"); err != nil {
+		return "", 0, err
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return "", 0, err
+	}
+	stmt, err := tx.Prepare("INSERT INTO raw_fts(source_rel, title, body) VALUES (?, ?, ?)")
+	if err != nil {
+		return "", 0, err
+	}
+	defer stmt.Close()
+	for _, d := range docs {
+		if _, err := stmt.Exec(d.SourceRel, extractHTMLTitle(d.Text), d.Text); err != nil {
+			return "", 0, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return "", 0, err
+	}
+	return path, time.Since(start), nil
+}
+
+func rawFTSHits(path, query string) ([]string, time.Duration) {
+	start := time.Now()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil, time.Since(start)
+	}
+	defer db.Close()
+	terms := tokenize(query, true)
+	rows, err := db.Query("SELECT source_rel FROM raw_fts WHERE raw_fts MATCH ? ORDER BY bm25(raw_fts, 0.0, 10.0, 1.0) LIMIT 10", strings.Join(terms, " "))
 	if err != nil {
 		return nil, time.Since(start)
 	}
@@ -211,11 +287,11 @@ func generatedCases(corpus string, limit int) ([]benchCase, error) {
 		return nil, err
 	}
 	defer file.Close()
-	var cases []benchCase
+	var eligible []benchCase
 	scanner := bufio.NewScanner(file)
 	buf := make([]byte, 1024*1024)
 	scanner.Buffer(buf, 16*1024*1024)
-	for scanner.Scan() && len(cases) < limit {
+	for scanner.Scan() {
 		var rec struct {
 			SourceRel string `json:"source_rel"`
 			Title     string `json:"title"`
@@ -229,10 +305,21 @@ func generatedCases(corpus string, limit int) ([]benchCase, error) {
 			query = rec.PageID
 		}
 		if len(query) >= 4 {
-			cases = append(cases, benchCase{"generated:" + rec.SourceRel, query, rec.SourceRel, true})
+			eligible = append(eligible, benchCase{"generated:" + rec.SourceRel, query, rec.SourceRel, true})
 		}
 	}
-	return cases, scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	if limit <= 0 || len(eligible) <= limit {
+		return eligible, nil
+	}
+	stride := len(eligible) / limit
+	var cases []benchCase
+	for i := 0; i < len(eligible) && len(cases) < limit; i += stride {
+		cases = append(cases, eligible[i])
+	}
+	return cases, nil
 }
 
 func containsHit(hits []hit, expected string) bool {
@@ -277,6 +364,13 @@ func main() {
 		os.Exit(1)
 	}
 	loadDuration := time.Since(loadStart)
+	fmt.Fprintln(os.Stderr, "Indexing raw HTML into the FTS5 baseline (one-time, several minutes on a full corpus)...")
+	rawFTSPath, rawFTSBuild, err := buildRawFTSIndex(sourceDocs)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
+	defer os.Remove(rawFTSPath)
 	cases := append([]benchCase{}, defaultCases...)
 	generated, err := generatedCases(*corpus, *generatedCount)
 	if err != nil {
@@ -307,15 +401,18 @@ func main() {
 				sourceHits, sourceElapsed, _ := searchDocs(sourceDocs, terms)
 				derivedHits, derivedElapsed, _ := searchDocs(derivedDocs, terms)
 				ftsHits, ftsElapsed := sqliteHits(*corpus, c.Query)
+				rawHits, rawElapsed := rawFTSHits(rawFTSPath, c.Query)
 				results[index] = caseResult{
 					Name:        c.Name,
 					Expected:    c.Expected,
 					SourceOK:    containsHit(sourceHits, c.Expected),
 					DerivedOK:   containsHit(derivedHits, c.Expected),
 					SQLiteOK:    containsString(ftsHits, c.Expected),
+					RawFTSOK:    containsString(rawHits, c.Expected),
 					SourceTime:  sourceElapsed,
 					DerivedTime: derivedElapsed,
 					SQLiteTime:  ftsElapsed,
+					RawFTSTime:  rawElapsed,
 				}
 			}
 		}()
@@ -325,24 +422,43 @@ func main() {
 	}
 	close(caseCh)
 	wg.Wait()
-	sourceRecall, derivedRecall, sqliteRecall := 0, 0, 0
-	var sourceSearch, derivedSearch, sqliteSearch time.Duration
+	sourceRecall, derivedRecall, sqliteRecall, rawFTSRecall := 0, 0, 0, 0
+	var sourceSearch, derivedSearch, sqliteSearch, rawFTSSearch time.Duration
 	var missSamples []map[string]any
+	sectionStats := map[string]map[string]int{}
 	for _, result := range results {
+		section := "ScriptReference"
+		if strings.HasPrefix(result.Expected, "Manual/") {
+			section = "Manual"
+		}
+		stats := sectionStats[section]
+		if stats == nil {
+			stats = map[string]int{}
+			sectionStats[section] = stats
+		}
+		stats["cases"]++
 		if result.SourceOK {
 			sourceRecall++
+			stats["source_top10_recall_count"]++
 		}
 		if result.DerivedOK {
 			derivedRecall++
+			stats["derived_top10_recall_count"]++
 		}
 		if result.SQLiteOK {
 			sqliteRecall++
+			stats["sqlite_top10_recall_count"]++
+		}
+		if result.RawFTSOK {
+			rawFTSRecall++
+			stats["raw_fts_top10_recall_count"]++
 		}
 		sourceSearch += result.SourceTime
 		derivedSearch += result.DerivedTime
 		sqliteSearch += result.SQLiteTime
-		if len(missSamples) < 20 && (!result.SourceOK || !result.DerivedOK || !result.SQLiteOK) {
-			missSamples = append(missSamples, map[string]any{"name": result.Name, "expected": result.Expected, "source_top10_recall": result.SourceOK, "derived_top10_recall": result.DerivedOK, "sqlite_top10_recall": result.SQLiteOK})
+		rawFTSSearch += result.RawFTSTime
+		if len(missSamples) < 20 && (!result.SourceOK || !result.DerivedOK || !result.SQLiteOK || !result.RawFTSOK) {
+			missSamples = append(missSamples, map[string]any{"name": result.Name, "expected": result.Expected, "source_top10_recall": result.SourceOK, "derived_top10_recall": result.DerivedOK, "sqlite_top10_recall": result.SQLiteOK, "raw_fts_top10_recall": result.RawFTSOK})
 		}
 	}
 	report := map[string]any{
@@ -359,8 +475,10 @@ func main() {
 		"source_top10_recall_count":  sourceRecall,
 		"derived_top10_recall_count": derivedRecall,
 		"sqlite_top10_recall_count":  sqliteRecall,
+		"raw_fts_top10_recall_count": rawFTSRecall,
+		"recall_by_section":          sectionStats,
 		"worker_count":               *workers,
-		"timings_ms":                 map[string]float64{"load": float64(loadDuration.Microseconds()) / 1000, "source_search_total": float64(sourceSearch.Microseconds()) / 1000, "derived_search_total": float64(derivedSearch.Microseconds()) / 1000, "sqlite_search_total": float64(sqliteSearch.Microseconds()) / 1000, "total": float64(time.Since(totalStart).Microseconds()) / 1000},
+		"timings_ms":                 map[string]float64{"load": float64(loadDuration.Microseconds()) / 1000, "raw_fts_index_build": float64(rawFTSBuild.Microseconds()) / 1000, "source_search_total": float64(sourceSearch.Microseconds()) / 1000, "derived_search_total": float64(derivedSearch.Microseconds()) / 1000, "sqlite_search_total": float64(sqliteSearch.Microseconds()) / 1000, "raw_fts_search_total": float64(rawFTSSearch.Microseconds()) / 1000, "total": float64(time.Since(totalStart).Microseconds()) / 1000},
 		"miss_samples":               missSamples,
 	}
 	data, _ := json.MarshalIndent(report, "", "  ")

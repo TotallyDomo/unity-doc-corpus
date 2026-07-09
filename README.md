@@ -10,25 +10,36 @@ ships tooling and agent skills only.
 
 ## Numbers
 
-Unity 6000.3 offline documentation, reference build (reproduce with the benchmarks below):
+Unity 6000.3 offline documentation, reference build (the checked-in reference run is
+[docs/benchmark-6000.3.json](docs/benchmark-6000.3.json); reproduce it with the command
+below):
 
 | Metric | Value |
 | --- | --- |
 | Pages transformed (Manual + ScriptReference) | 39,056 |
 | Source HTML | 648 MB |
-| Derived Markdown | 76 MB (11.7% of source bytes) |
-| Full corpus build | under a minute wall clock (8 workers) |
-| Top-10 recall, SQLite FTS5 | 91.9% (926/1008 cases) |
-| Top-10 recall, grepping the raw HTML | 57.1% (576/1008 cases), ~42x slower (~292 ms vs ~7 ms per query) |
+| Derived Markdown | 61 MB (9.5% of source bytes) |
+| Full corpus build | ~45 s right after fetch (8 workers); I/O-bound, budget 2-3x on a cold file cache |
+| Top-10 recall, corpus FTS5 (title-weighted bm25) | 96.9% (977/1008 cases; 95.7% on Manual concept pages) |
+| Top-10 recall, same bm25 over the raw HTML | 96.9% (977/1008) - recall parity with the corpus lane |
+| Top-10 recall, naive ranked scan of the raw HTML (grep-style) | 93.8% (945/1008; 59.1% on Manual concept pages), ~77x slower (~209 ms vs ~2.7 ms per query) |
 
-Benchmark cases are 8 curated lookups plus 1000 generated from page titles and page ids; a
-case counts as recalled when the expected page appears in the top 10 results. Reproduce with
+Benchmark cases are 8 curated lookups plus 1000 generated from page titles and page ids,
+sampled evenly across the whole corpus so the mix matches its ~91% ScriptReference / ~9%
+Manual composition; a case counts as recalled when the expected page appears in the top 10
+results. Reproduce with
 `bin/unity-doc-corpus-benchmark --source unity-docs --corpus unity-docs/_agent --generated-cases 1000`.
 
-Why this matters for agents: documentation lookups happen inside a context window billed per
-token. An ~88% byte reduction per page - with a recorded source path and SHA-256 for every
-transformed page - means cheap lookups that keep a verification path back to the original
-HTML.
+Why this matters for agents: documentation lookups happen inside a context window billed
+per token. This corpus does not claim better retrieval than indexing Unity's raw HTML -
+measured with the same ranker, recall is equal - and that parity is the point: you keep the
+recall while every page an agent actually reads shrinks by ~90%, and the search index
+shrinks ~10x (84 MB vs ~860 MB for the same recall over raw HTML). The transform is
+deliberately lossy (tables flatten, code loses fencing), so every derived page records the
+source path and SHA-256 of the original it came from; when an answer hinges on one page's
+exact details, the untouched original is one local command away
+(`bin/unity-doc-corpus source <source_rel>`). That is insurance against transform bugs,
+not a routine second read.
 
 ## How it works
 
@@ -70,13 +81,18 @@ Go names the binaries itself (`.exe` included on Windows) and writes them to `bi
 `scripts/build.ps1` is the equivalent for PowerShell-script workflows.
 
 **2. Fetch Unity's official offline docs** (one-time per version; ~475 MB for 6000.3; the
-zip is deleted after extraction - add `--keep-zip` to cache it):
+zip's SHA-256 is printed and recorded in `unity-docs/.unity-doc-fetch`, and the zip itself
+is kept in `unity-docs/` as the ground-truth artifact - pass `--delete-zip` to drop it):
 
 ```
 bin/unity-doc-corpus fetch --version 6000.3
 ```
 
-**3. Build the derived corpus** (writes `unity-docs/_agent`, takes under a minute):
+**3. Build the derived corpus** (writes `unity-docs/_agent`; ~45 s right after fetch,
+longer on a cold file cache - the read stage is I/O-bound). After a successful build the
+extracted HTML is pruned again - the retained zip can rematerialize it at any time, and a
+later `build` does so automatically. Pass `--keep-source` to keep the extracted tree
+around (you want this when iterating on the transform itself):
 
 ```
 bin/unity-doc-corpus build --source unity-docs --output unity-docs/_agent
@@ -85,8 +101,16 @@ bin/unity-doc-corpus build --source unity-docs --output unity-docs/_agent
 **4. Look something up** - built-in FTS5 search, no sqlite3 CLI or Python needed:
 
 ```
-bin/unity-doc-corpus search "addressables memory"
+bin/unity-doc-corpus search "script execution order"
 ```
+
+Steady-state footprint after these steps is ~665 MB: the ~475 MB zip plus ~190 MB of
+derived corpus. Reading a page's original HTML never needs a full re-extract -
+`bin/unity-doc-corpus source Manual/ExecutionOrder.html` prints it straight from the zip.
+If even the zip is too much, delete it (or fetch with `--delete-zip`) for a ~190 MB
+footprint; everything keeps working except offline verification and offline rebuilds -
+originals are then a pinned online fetch of each page's frontmatter `canonical_url`, and a
+rebuild is a re-fetch.
 
 ## Agent skills
 
@@ -107,18 +131,32 @@ The explicit flags are deliberate: the CLI's interactive selector makes it easy 
 only one of the two skills, and on Windows its default symlink install can fail silently,
 leaving the skills only under `.agents/skills/` - a directory Claude Code does not read.
 `--copy` writes real files into `.claude/skills/` instead. Use `--skill unity-docs` for
-lookup only, or `-g` to install user-globally rather than per-project. The corpus itself is
-still built once via the Quickstart above.
+lookup only, or `-g` to install user-globally rather than per-project. Prefer not to run
+`npx` at all? The skills are plain Markdown - copy `skills/unity-docs` (and optionally
+`skills/unity-doc-corpus`) into `.claude/skills/` yourself. The corpus itself is still
+built once via the Quickstart above.
 
 ## Trust surface
 
 - **Network**: `fetch` talks only to Unity's official documentation locations, all pinned
   in `go/fetch.go`: `docs.unity3d.com` to resolve the zip URL, and Unity's
   `docscloudstorage` bucket for the zip itself - via `cloudmedia-docs.unity3d.com` (current
-  streams) or `storage.googleapis.com/docscloudstorage/` (2019.4 and older). Nothing else
-  fetches anything at runtime; the lookup skill is pure local reads.
+  streams) or `storage.googleapis.com/docscloudstorage/` (2019.4 and older). The pinning
+  holds on every hop: redirects off those hosts are refused, not followed. Nothing else
+  fetches anything at runtime; the lookup skill is pure local reads, with one named
+  exception - verifying a page against its original when neither the extracted HTML nor
+  the retained zip is on disk means fetching that page's `canonical_url` from
+  `docs.unity3d.com`, and the skill says so when it does.
+- **Download integrity**: Unity publishes no checksum for the zip, so TLS to the pinned
+  hosts is the integrity control on the download itself. `fetch` prints the zip's SHA-256
+  and records it (with the version and URL) in a `.unity-doc-fetch` marker so you can pin
+  a known-good value across re-fetches. The per-page SHA-256 chain in the corpus proves
+  each derived page matches the HTML on your disk - consistency, not provenance.
 - **Executes**: the two Go binaries you build from this repo's source, plus optional local
-  Python scripts. No prebuilt binaries, no piped installers, no hooks.
+  Python scripts. No prebuilt binaries, no hooks. One exception to name plainly: the
+  `npx skills add` install path below runs the third-party `skills` npm package; if that
+  is outside your trust budget, copy the skill folders by hand instead - they are plain
+  Markdown.
 - **Data egress**: none.
 
 ## Legal posture

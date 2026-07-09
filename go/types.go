@@ -9,8 +9,6 @@ type parsedPage struct {
 
 	Canonical string
 
-	Version string
-
 	Headings []string
 
 	Links []link
@@ -54,8 +52,6 @@ type record struct {
 	TextSHA256 string `json:"text_sha256"`
 
 	Title string `json:"title"`
-
-	UnityVersion string `json:"unity_version"`
 
 	Body string `json:"-"`
 }

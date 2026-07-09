@@ -1,0 +1,204 @@
+{
+  "case_count": 1008,
+  "corpus": "unity-docs/_agent",
+  "default_case_count": 8,
+  "derived_file_count": 39056,
+  "derived_markdown_bytes": 61491683,
+  "derived_to_source_ratio": 0.09483401398819095,
+  "derived_top10_recall_count": 958,
+  "generated_case_count": 1000,
+  "miss_samples": [
+    {
+      "derived_top10_recall": false,
+      "expected": "ScriptReference/Object.DestroyImmediate.html",
+      "name": "DestroyImmediate API",
+      "raw_fts_top10_recall": true,
+      "source_top10_recall": false,
+      "sqlite_top10_recall": true
+    },
+    {
+      "derived_top10_recall": false,
+      "expected": "Manual/DynamicResolution-introduction.html",
+      "name": "Dynamic Resolution manual",
+      "raw_fts_top10_recall": true,
+      "source_top10_recall": false,
+      "sqlite_top10_recall": true
+    },
+    {
+      "derived_top10_recall": false,
+      "expected": "Manual/execution-order.html",
+      "name": "Script execution order manual",
+      "raw_fts_top10_recall": false,
+      "source_top10_recall": false,
+      "sqlite_top10_recall": false
+    },
+    {
+      "derived_top10_recall": false,
+      "expected": "Manual/2DAnd3DModeSettings.html",
+      "name": "generated:Manual/2DAnd3DModeSettings.html",
+      "raw_fts_top10_recall": true,
+      "source_top10_recall": false,
+      "sqlite_top10_recall": true
+    },
+    {
+      "derived_top10_recall": false,
+      "expected": "Manual/2d-physics/joints/friction-joint-2d-reference.html",
+      "name": "generated:Manual/2d-physics/joints/friction-joint-2d-reference.html",
+      "raw_fts_top10_recall": true,
+      "source_top10_recall": true,
+      "sqlite_top10_recall": true
+    },
+    {
+      "derived_top10_recall": false,
+      "expected": "Manual/2d-urp-landing.html",
+      "name": "generated:Manual/2d-urp-landing.html",
+      "raw_fts_top10_recall": true,
+      "source_top10_recall": false,
+      "sqlite_top10_recall": true
+    },
+    {
+      "derived_top10_recall": false,
+      "expected": "Manual/AudioFiles-compression.html",
+      "name": "generated:Manual/AudioFiles-compression.html",
+      "raw_fts_top10_recall": true,
+      "source_top10_recall": false,
+      "sqlite_top10_recall": true
+    },
+    {
+      "derived_top10_recall": false,
+      "expected": "Manual/CameraRays-cast.html",
+      "name": "generated:Manual/CameraRays-cast.html",
+      "raw_fts_top10_recall": true,
+      "source_top10_recall": true,
+      "sqlite_top10_recall": true
+    },
+    {
+      "derived_top10_recall": false,
+      "expected": "Manual/Layers.html",
+      "name": "generated:Manual/Layers.html",
+      "raw_fts_top10_recall": true,
+      "source_top10_recall": false,
+      "sqlite_top10_recall": true
+    },
+    {
+      "derived_top10_recall": false,
+      "expected": "Manual/Lightmapping-preview.html",
+      "name": "generated:Manual/Lightmapping-preview.html",
+      "raw_fts_top10_recall": true,
+      "source_top10_recall": false,
+      "sqlite_top10_recall": true
+    },
+    {
+      "derived_top10_recall": true,
+      "expected": "Manual/ParticleSystems.html",
+      "name": "generated:Manual/ParticleSystems.html",
+      "raw_fts_top10_recall": true,
+      "source_top10_recall": false,
+      "sqlite_top10_recall": true
+    },
+    {
+      "derived_top10_recall": true,
+      "expected": "Manual/ProfilerWindow.html",
+      "name": "generated:Manual/ProfilerWindow.html",
+      "raw_fts_top10_recall": true,
+      "source_top10_recall": true,
+      "sqlite_top10_recall": false
+    },
+    {
+      "derived_top10_recall": true,
+      "expected": "Manual/Shader-Autodesk-Interactive.html",
+      "name": "generated:Manual/Shader-Autodesk-Interactive.html",
+      "raw_fts_top10_recall": true,
+      "source_top10_recall": false,
+      "sqlite_top10_recall": true
+    },
+    {
+      "derived_top10_recall": true,
+      "expected": "Manual/UIE-font-asset.html",
+      "name": "generated:Manual/UIE-font-asset.html",
+      "raw_fts_top10_recall": true,
+      "source_top10_recall": false,
+      "sqlite_top10_recall": true
+    },
+    {
+      "derived_top10_recall": false,
+      "expected": "Manual/UpgradeGuide20231.html",
+      "name": "generated:Manual/UpgradeGuide20231.html",
+      "raw_fts_top10_recall": true,
+      "source_top10_recall": true,
+      "sqlite_top10_recall": true
+    },
+    {
+      "derived_top10_recall": false,
+      "expected": "Manual/ai-menu-access.html",
+      "name": "generated:Manual/ai-menu-access.html",
+      "raw_fts_top10_recall": true,
+      "source_top10_recall": false,
+      "sqlite_top10_recall": true
+    },
+    {
+      "derived_top10_recall": false,
+      "expected": "Manual/android-device-simulator.html",
+      "name": "generated:Manual/android-device-simulator.html",
+      "raw_fts_top10_recall": true,
+      "source_top10_recall": false,
+      "sqlite_top10_recall": true
+    },
+    {
+      "derived_top10_recall": false,
+      "expected": "Manual/android-native-plugins-create.html",
+      "name": "generated:Manual/android-native-plugins-create.html",
+      "raw_fts_top10_recall": true,
+      "source_top10_recall": false,
+      "sqlite_top10_recall": true
+    },
+    {
+      "derived_top10_recall": false,
+      "expected": "Manual/assets-and-media.html",
+      "name": "generated:Manual/assets-and-media.html",
+      "raw_fts_top10_recall": true,
+      "source_top10_recall": false,
+      "sqlite_top10_recall": true
+    },
+    {
+      "derived_top10_recall": true,
+      "expected": "Manual/best-practice-guides/ui-toolkit-for-advanced-unity-developers/data-binding.html",
+      "name": "generated:Manual/best-practice-guides/ui-toolkit-for-advanced-unity-developers/data-binding.html",
+      "raw_fts_top10_recall": false,
+      "source_top10_recall": true,
+      "sqlite_top10_recall": false
+    }
+  ],
+  "raw_fts_top10_recall_count": 977,
+  "recall_by_section": {
+    "Manual": {
+      "cases": 93,
+      "derived_top10_recall_count": 58,
+      "raw_fts_top10_recall_count": 89,
+      "source_top10_recall_count": 55,
+      "sqlite_top10_recall_count": 89
+    },
+    "ScriptReference": {
+      "cases": 915,
+      "derived_top10_recall_count": 900,
+      "raw_fts_top10_recall_count": 888,
+      "source_top10_recall_count": 890,
+      "sqlite_top10_recall_count": 888
+    }
+  },
+  "source": "unity-docs",
+  "source_file_count": 39056,
+  "source_html_bytes": 648413796,
+  "source_top10_recall_count": 945,
+  "sqlite_top10_recall_count": 977,
+  "timings_ms": {
+    "derived_search_total": 42079.651,
+    "load": 10133.311,
+    "raw_fts_index_build": 16026.024,
+    "raw_fts_search_total": 3732.787,
+    "source_search_total": 211104.076,
+    "sqlite_search_total": 2723.061,
+    "total": 59058.536
+  },
+  "worker_count": 8
+}

@@ -30,6 +30,12 @@ func runSearch(args []string) {
 	corpus := fs.String("corpus", defaultCorpusDir, "Derived corpus directory (the builder's --output).")
 	limit := fs.Int("limit", 10, "Maximum number of results.")
 	_ = fs.Parse(args)
+	for _, arg := range fs.Args() {
+		if strings.HasPrefix(arg, "-") {
+			fmt.Fprintf(os.Stderr, "error: flag %q found after the query - flags must come before it\nUsage: unity-doc-corpus search [--corpus <agent-output>] [--limit N] <query>\n", arg)
+			os.Exit(2)
+		}
+	}
 	query := strings.TrimSpace(strings.Join(fs.Args(), " "))
 	if query == "" {
 		fmt.Fprintln(os.Stderr, "Usage: unity-doc-corpus search [--corpus <agent-output>] [--limit N] <query>")
@@ -72,11 +78,21 @@ func searchCorpus(corpusDir, query string, limit int) ([]searchHit, error) {
 		return nil, err
 	}
 	defer db.Close()
+	// bm25 weights: page_key (unindexed), title, body. Title outweighs body 10:1 - measured
+	// on the reference benchmark, unweighted bm25 buries short canonical pages (a bare class
+	// name ranks the class page below its member pages).
 	const q = `SELECT p.section, p.page_id, p.title, p.md_rel
 FROM pages_fts f JOIN pages p ON p.page_key = f.page_key
 WHERE pages_fts MATCH ?
-ORDER BY bm25(pages_fts) LIMIT ?`
+ORDER BY bm25(pages_fts, 0.0, 10.0, 1.0) LIMIT ?`
 	rows, err := db.Query(q, query, limit)
+	if err != nil && strings.Contains(err.Error(), "syntax error") {
+		// Raw FTS5 syntax choked (dots in API names, stray operators). Retry with the query
+		// reduced to plain alphanumeric terms instead of surfacing an FTS5 parse error.
+		if sanitized := ftsSanitize(query); sanitized != "" && sanitized != query {
+			rows, err = db.Query(q, sanitized, limit)
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("FTS query failed (was the corpus built with FTS5 support? check manifest.json sqlite_fts5): %w", err)
 	}
@@ -90,4 +106,26 @@ ORDER BY bm25(pages_fts) LIMIT ?`
 		hits = append(hits, h)
 	}
 	return hits, rows.Err()
+}
+
+// ftsSanitize reduces a query to space-separated alphanumeric terms - the same shape the
+// benchmark feeds FTS5 - dropping single-character fragments.
+func ftsSanitize(query string) string {
+	var terms []string
+	var b strings.Builder
+	flush := func() {
+		if b.Len() > 1 {
+			terms = append(terms, b.String())
+		}
+		b.Reset()
+	}
+	for _, r := range query {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		} else {
+			flush()
+		}
+	}
+	flush()
+	return strings.Join(terms, " ")
 }

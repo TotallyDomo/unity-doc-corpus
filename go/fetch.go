@@ -2,6 +2,9 @@ package main
 
 import (
 	"archive/zip"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -28,7 +31,51 @@ const defaultFetchDestination = "unity-docs"
 // copy pass.
 var sectionDirs = []string{"Manual", "ScriptReference"}
 
-var httpClient = &http.Client{Timeout: 30 * time.Minute}
+// pinnedDocHosts is the closed set of hosts fetch may contact on any hop. Unity publishes
+// no checksums for the docs zip, so TLS to these hosts is the only integrity control on
+// the download - a redirect off them must fail, not be followed.
+var pinnedDocHosts = map[string]bool{
+	"docs.unity3d.com":            true,
+	"cloudmedia-docs.unity3d.com": true,
+	"storage.googleapis.com":      true,
+}
+
+var httpClient = &http.Client{
+	Timeout: 30 * time.Minute,
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if !pinnedDocHosts[req.URL.Hostname()] {
+			return fmt.Errorf("redirect to unpinned host refused: %s", req.URL)
+		}
+		return nil
+	},
+}
+
+// fetchMarkerName marks a directory as created by fetch. It carries the fetched Unity
+// version (surfaced by build into manifest.json) and the zip provenance, and it is the
+// only kind of directory `fetch --force` will delete.
+const fetchMarkerName = ".unity-doc-fetch"
+
+type fetchInfo struct {
+	UnityVersion string `json:"unity_version"`
+	ZipURL       string `json:"zip_url"`
+	ZipSHA256    string `json:"zip_sha256"`
+	FetchedAtUTC string `json:"fetched_at_utc"`
+	// ZipName is the retained zip's filename inside the destination directory. Empty when
+	// the zip was deleted (--delete-zip) or the marker predates zip retention.
+	ZipName string `json:"zip_name,omitempty"`
+}
+
+func readFetchInfo(root string) (fetchInfo, bool) {
+	data, err := os.ReadFile(filepath.Join(root, fetchMarkerName))
+	if err != nil {
+		return fetchInfo{}, false
+	}
+	var info fetchInfo
+	if json.Unmarshal(data, &info) != nil {
+		return fetchInfo{}, false
+	}
+	return info, true
+}
 
 // Offline docs zips live in Unity's docscloudstorage bucket, served from two hosts: the
 // cloudmedia CDN for current streams (2020.3+) and the GCS bucket directly for older ones
@@ -42,20 +89,20 @@ func runFetch(args []string) {
 	cacheRoot := fs.String("cache-root", "", "Download cache dir. Defaults to <os-temp-dir>/unity-doc-downloads.")
 	workers := fs.Int("workers", 0, "Parallel extraction workers. Defaults to the number of logical CPUs.")
 	force := fs.Bool("force", false, "Replace an existing destination directory.")
-	keepZip := fs.Bool("keep-zip", false, "Keep the downloaded zip in the cache after extraction (default: delete it to reclaim space).")
+	deleteZip := fs.Bool("delete-zip", false, "Delete the zip after extraction instead of keeping it in the destination (the retained zip is the rebuild/verification artifact).")
 	resolveOnly := fs.Bool("resolve-only", false, "Print the resolved zip URL and exit without downloading.")
 	_ = fs.Parse(args)
 	if *version == "" {
-		fmt.Fprintln(os.Stderr, "Usage: unity-doc-corpus fetch --version <ver> [--destination <dir>] [--cache-root <dir>] [--workers N] [--force] [--keep-zip] [--resolve-only]")
+		fmt.Fprintln(os.Stderr, "Usage: unity-doc-corpus fetch --version <ver> [--destination <dir>] [--cache-root <dir>] [--workers N] [--force] [--delete-zip] [--resolve-only]")
 		os.Exit(2)
 	}
-	if err := fetch(*version, *destination, *cacheRoot, *workers, *force, *keepZip, *resolveOnly); err != nil {
+	if err := fetch(*version, *destination, *cacheRoot, *workers, *force, *deleteZip, *resolveOnly); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
-func fetch(version, destination, cacheRoot string, workers int, force, keepZip, resolveOnly bool) error {
+func fetch(version, destination, cacheRoot string, workers int, force, deleteZip, resolveOnly bool) error {
 	if workers < 1 {
 		workers = runtime.NumCPU()
 	}
@@ -80,28 +127,38 @@ func fetch(version, destination, cacheRoot string, workers int, force, keepZip, 
 	if err != nil {
 		return err
 	}
-	if _, err := os.Stat(destAbs); err == nil && !force {
-		return fmt.Errorf("destination already exists, pass --force to replace it: %s", destAbs)
-	}
 	if err := os.MkdirAll(cacheAbs, 0o755); err != nil {
 		return err
 	}
-
 	zipPath := filepath.Join(cacheAbs, version+"-UnityDocumentation.zip")
+	// A --force re-fetch is about to delete the destination; salvage its retained zip into
+	// the cache first so the same version is not downloaded again.
+	if info, ok := readFetchInfo(destAbs); ok && info.ZipName != "" && info.UnityVersion == version {
+		retained := filepath.Join(destAbs, info.ZipName)
+		if _, err := os.Stat(zipPath); os.IsNotExist(err) {
+			if err := moveFile(retained, zipPath); err == nil {
+				fmt.Fprintln(os.Stderr, "Reusing retained zip from destination:", retained)
+			}
+		}
+	}
+	if err := prepareFetchDestination(destAbs, force); err != nil {
+		return err
+	}
+	var zipSHA string
 	if _, err := os.Stat(zipPath); err != nil {
 		fmt.Fprintf(os.Stderr, "Downloading to %s\n", zipPath)
-		if err := downloadFile(zipURL, zipPath); err != nil {
+		zipSHA, err = downloadFile(zipURL, zipPath)
+		if err != nil {
 			return err
 		}
 	} else {
 		fmt.Fprintln(os.Stderr, "Using cached zip:", zipPath)
-	}
-
-	if force {
-		if err := os.RemoveAll(destAbs); err != nil {
+		zipSHA, err = hashFileSHA256(zipPath)
+		if err != nil {
 			return err
 		}
 	}
+	fmt.Fprintln(os.Stderr, "Zip SHA-256:", zipSHA)
 	if err := os.MkdirAll(destAbs, 0o755); err != nil {
 		return err
 	}
@@ -113,18 +170,64 @@ func fetch(version, destination, cacheRoot string, workers int, force, keepZip, 
 	// The pre-selective pipeline expanded the whole zip into <ver>-expanded before copying;
 	// current fetch never creates it, so remove any leftover to keep the cache lean.
 	os.RemoveAll(filepath.Join(cacheAbs, version+"-expanded"))
-	// The zip is only needed during extraction - build reads the extracted docs, not the
-	// archive - so delete it by default to reclaim ~475 MB. --keep-zip retains the cache for
-	// a later re-fetch (e.g. reusing one download across several builds).
-	if !keepZip {
+	// The zip is the retained ground-truth artifact: build can rematerialize the extracted
+	// tree from it and the source verb can read original pages out of it, so it moves into
+	// the destination (the OS temp cache is not a safe long-term home). --delete-zip drops
+	// it to reclaim ~475 MB, leaving online canonical_url lookups as the verification path.
+	zipName := ""
+	if deleteZip {
 		if err := os.Remove(zipPath); err == nil {
-			fmt.Fprintln(os.Stderr, "Removed cached zip (pass --keep-zip to retain):", zipPath)
+			fmt.Fprintln(os.Stderr, "Removed zip (--delete-zip):", zipPath)
 		}
+	} else {
+		zipName = filepath.Base(zipPath)
+		if err := moveFile(zipPath, filepath.Join(destAbs, zipName)); err != nil {
+			return fmt.Errorf("retaining zip in destination: %w", err)
+		}
+		fmt.Fprintln(os.Stderr, "Retained zip:", filepath.Join(destAbs, zipName))
+	}
+
+	info := fetchInfo{UnityVersion: version, ZipURL: zipURL, ZipSHA256: zipSHA, FetchedAtUTC: time.Now().UTC().Format(time.RFC3339), ZipName: zipName}
+	infoBytes, err := json.MarshalIndent(info, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(destAbs, fetchMarkerName), append(infoBytes, '\n'), 0o644); err != nil {
+		return err
 	}
 
 	fmt.Fprintln(os.Stderr, "Done. Docs extracted to:", destAbs)
 	fmt.Fprintf(os.Stderr, "Next: bin/unity-doc-corpus build --source %s --output %s\n", destination, destination+"/_agent")
 	return nil
+}
+
+// prepareFetchDestination clears an existing destination only when --force is set AND the
+// directory carries the fetch marker proving this tool created it - the same guard shape
+// build uses for its output. Anything else is refused, never deleted.
+func prepareFetchDestination(destAbs string, force bool) error {
+	if _, err := os.Stat(destAbs); err != nil {
+		return nil
+	}
+	if !force {
+		return fmt.Errorf("destination already exists, pass --force to replace it: %s", destAbs)
+	}
+	if _, err := os.Stat(filepath.Join(destAbs, fetchMarkerName)); err != nil {
+		return fmt.Errorf("refusing to replace %s: it has no %s marker, so fetch did not create it - delete it yourself if you really mean it", destAbs, fetchMarkerName)
+	}
+	return os.RemoveAll(destAbs)
+}
+
+func hashFileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // resolveZipURL fetches Unity's offline-documentation page and scrapes the real zip URL,
@@ -178,14 +281,14 @@ func probeZipCandidates(candidates []string) (string, error) {
 	return candidates[0], nil
 }
 
-func downloadFile(url, dest string) error {
+func downloadFile(url, dest string) (string, error) {
 	resp, err := httpClient.Get(url)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download failed: %s -> HTTP %d", url, resp.StatusCode)
+		return "", fmt.Errorf("download failed: %s -> HTTP %d", url, resp.StatusCode)
 	}
 	if resp.ContentLength > 0 {
 		fmt.Fprintf(os.Stderr, "Download size: %d MB\n", resp.ContentLength/(1000*1000))
@@ -193,18 +296,22 @@ func downloadFile(url, dest string) error {
 	tmp := dest + ".part"
 	out, err := os.Create(tmp)
 	if err != nil {
-		return err
+		return "", err
 	}
-	if _, err := io.Copy(out, resp.Body); err != nil {
+	hasher := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(out, hasher), resp.Body); err != nil {
 		out.Close()
 		os.Remove(tmp)
-		return err
+		return "", err
 	}
 	if err := out.Close(); err != nil {
 		os.Remove(tmp)
-		return err
+		return "", err
 	}
-	return os.Rename(tmp, dest)
+	if err := os.Rename(tmp, dest); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
 // extractSections extracts only the Manual and ScriptReference subtrees from the offline docs
@@ -351,6 +458,39 @@ func underSection(rel string) bool {
 		}
 	}
 	return false
+}
+
+// moveFile renames src to dst, falling back to copy+delete when they sit on different
+// volumes (the download cache defaults to the OS temp dir, which may not share a volume
+// with the destination).
+func moveFile(src, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	tmp := dst + ".part"
+	out, err := os.Create(tmp)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := out.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		return err
+	}
+	in.Close()
+	return os.Remove(src)
 }
 
 func writeZipEntry(f *zip.File, target string) error {

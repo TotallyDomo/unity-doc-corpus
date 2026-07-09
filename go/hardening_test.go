@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,13 +65,86 @@ func TestParseHTMLExtractionContract(t *testing.T) {
 	if !strings.Contains(p.Body, "Physics 2D") {
 		t.Errorf("Body missing anchor text: %q", p.Body)
 	}
-	if !strings.Contains(p.Version, "6000.3") {
-		t.Errorf("Version = %q, want to contain 6000.3", p.Version)
-	}
 	for _, leak := range []string{"CHROME NAV", "FOOTER", "scriptLeak"} {
 		if strings.Contains(p.Body, leak) {
 			t.Errorf("Body leaked stripped content %q: %q", leak, p.Body)
 		}
+	}
+}
+
+// Glossary tooltip popups and the Switch to Manual button are page chrome: the visible
+// term must survive, the tooltiptext subtree (definition + More info + See in Glossary
+// boilerplate) and the switch button must not reach the body or the link list.
+func TestParseHTMLStripsTooltipAndSwitchLink(t *testing.T) {
+	const doc = `<div id="content-wrap">
+<p>Explore the <span class="tooltip" tabindex="0"><strong>Camera</strong><span class="tooltiptext">A component which creates an image. <a class="tooltipMoreInfoLink" href="CamerasOverview.html">More info</a><br/><span class="tooltipGlossaryLink">See in <a href="Glossary.html#Camera">Glossary</a></span></span></span> component window.</p>
+<a class="switch-link gray-btn sbtn left show" href="../Manual/class-Rigidbody.html">Switch to Manual</a>
+</div>`
+	p := parseHTML(doc)
+	if !strings.Contains(p.Body, "Camera") {
+		t.Errorf("visible tooltip term must survive: %q", p.Body)
+	}
+	for _, leak := range []string{"See in", "More info", "Switch to Manual", "A component which creates"} {
+		if strings.Contains(p.Body, leak) {
+			t.Errorf("Body leaked tooltip/switch chrome %q: %q", leak, p.Body)
+		}
+	}
+	for _, l := range p.Links {
+		if l.Text == "More info" || l.Text == "Glossary" || l.Text == "Switch to Manual" {
+			t.Errorf("chrome link leaked into link list: %+v", l)
+		}
+	}
+	// The <br/> inside tooltiptext is the real-page shape; a depth-tracking slip there
+	// ends the skip early AND corrupts contentDepth, dropping text after the tooltip.
+	if !strings.Contains(p.Body, "component window") {
+		t.Errorf("content after the tooltip must survive: %q", p.Body)
+	}
+}
+
+// Adjacent table cells must not fuse: without a td/th separator the parser glued a member
+// name to its description (e.g. "AllAreasArea mask..."), which then tokenized as one FTS token
+// so the member name could not be found in the body. The audit's first real catch (M0042-S0001).
+func TestParseHTMLSeparatesTableCells(t *testing.T) {
+	const doc = `<div id="content-wrap"><h2>Static Properties</h2>
+<table class="list"><tbody>
+<tr><td>AllAreas</td><td>Area mask constant that includes all areas</td></tr>
+<tr><th>Method</th><th>Description</th></tr>
+</tbody></table></div>`
+	p := parseHTML(doc)
+	if strings.Contains(p.Body, "AllAreasArea") {
+		t.Errorf("adjacent cell texts fused: %q", p.Body)
+	}
+	if strings.Contains(p.Body, "areasMethod") || strings.Contains(p.Body, "MethodDescription") {
+		t.Errorf("adjacent header/row cells fused: %q", p.Body)
+	}
+	for _, want := range []string{"AllAreas", "Area mask constant that includes all areas", "Method", "Description"} {
+		if !strings.Contains(p.Body, want) {
+			t.Errorf("cell text %q missing from body: %q", want, p.Body)
+		}
+	}
+}
+
+// A member-name link whose aria-label/href contains a chrome token as a substring (e.g.
+// "navigation" inside "AndroidNavigation") must NOT be skipped: chrome matching is on structural
+// attributes only, not on descriptive aria-label prose. Regression for the dropped enum names
+// the audit found (M0042-S0001).
+func TestParseHTMLKeepsMemberLinkWithChromeTokenInAriaLabel(t *testing.T) {
+	const doc = `<div id="content-wrap"><table class="list"><tbody>
+<tr><td class="lbl"><a href="Android.AndroidNavigation.Undefined.html" aria-label="Go to Android.AndroidNavigation.Undefined.html">Undefined</a></td>
+<td class="desc">Mirrors the Android property value NAVIGATION_UNDEFINED.</td></tr>
+</tbody></table></div>`
+	p := parseHTML(doc)
+	if !strings.Contains(p.Body, "Undefined") {
+		t.Errorf("member name dropped by aria-label chrome-token match: %q", p.Body)
+	}
+	found := false
+	for _, l := range p.Links {
+		if l.Text == "Undefined" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("member link not captured: %+v", p.Links)
 	}
 }
 
@@ -165,21 +240,127 @@ func TestSafePrepareOutputRefusesUnmarkedDir(t *testing.T) {
 	}
 }
 
+// prepareFetchDestination mirrors safePrepareOutput's guard for the fetch side:
+// --force may only delete a directory carrying the fetch marker.
+func TestPrepareFetchDestinationRefusesUnmarkedDir(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "docs")
+	if err := prepareFetchDestination(missing, false); err != nil {
+		t.Fatalf("non-existent destination should pass: %v", err)
+	}
+
+	unmarked := t.TempDir()
+	sentinel := filepath.Join(unmarked, "precious.txt")
+	if err := os.WriteFile(sentinel, []byte("do not delete"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareFetchDestination(unmarked, false); err == nil {
+		t.Fatal("existing destination without --force must be refused")
+	}
+	if err := prepareFetchDestination(unmarked, true); err == nil {
+		t.Fatal("--force on an unmarked directory must be refused")
+	}
+	if _, err := os.Stat(sentinel); err != nil {
+		t.Fatalf("guard deleted data it should have refused to touch: %v", err)
+	}
+
+	marked := t.TempDir()
+	if err := os.WriteFile(filepath.Join(marked, fetchMarkerName), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareFetchDestination(marked, true); err != nil {
+		t.Fatalf("marked dir with --force should be replaceable: %v", err)
+	}
+	if _, err := os.Stat(marked); err == nil {
+		t.Fatal("marked dir should have been removed")
+	}
+}
+
+// Host pinning must hold on every redirect hop, not just the initial URL: TLS to the
+// pinned hosts is the only integrity control on the download.
+func TestHTTPClientRefusesOffHostRedirect(t *testing.T) {
+	evil := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("evil bytes"))
+	}))
+	defer evil.Close()
+	redirector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, evil.URL+"/UnityDocumentation.zip", http.StatusFound)
+	}))
+	defer redirector.Close()
+
+	resp, err := httpClient.Get(redirector.URL)
+	if err == nil {
+		resp.Body.Close()
+		t.Fatal("redirect to an unpinned host must be refused")
+	}
+	if !strings.Contains(err.Error(), "unpinned host") {
+		t.Errorf("unexpected refusal error: %v", err)
+	}
+
+	for _, host := range []string{"docs.unity3d.com", "cloudmedia-docs.unity3d.com", "storage.googleapis.com"} {
+		req, _ := http.NewRequest("GET", "https://"+host+"/x", nil)
+		if err := httpClient.CheckRedirect(req, nil); err != nil {
+			t.Errorf("pinned host %s wrongly refused: %v", host, err)
+		}
+	}
+}
+
+// ftsSanitize is the fallback that keeps dotted API names and stray operators from
+// surfacing FTS5 syntax errors: reduce to alphanumeric terms, drop single characters.
+func TestFtsSanitize(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"Rigidbody.MovePosition", "Rigidbody MovePosition"},
+		{`"addressables memory"`, "addressables memory"},
+		{"ab - cd", "ab cd"},
+		{"a - b", ""},
+		{"---", ""},
+	}
+	for _, c := range cases {
+		if got := ftsSanitize(c.in); got != c.want {
+			t.Errorf("ftsSanitize(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestWriteMarkdownFallbacksAndLinkDedup(t *testing.T) {
 	rec := record{Section: "Manual", PageID: "Foo", SourceRel: "Manual/Foo.html"}
-	links := []link{{"A", "a.html"}, {"A", "a.html"}, {"B", "b.html"}}
+	links := []link{
+		{"A", "a.html"},
+		{"A", "a.html"},
+		{"A2", "a.html"},
+		{"Anchored", "a.html#frag"},
+		{"Self", "Foo.html"},
+		{"SelfFrag", "Foo.html#part"},
+		{"FragOnly", "#top"},
+		{"B", "b.html"},
+	}
 	out := string(writeMarkdown(rec, links))
 
 	if !strings.Contains(out, "section: Manual") {
 		t.Error("missing front-matter section")
 	}
-	if !strings.Contains(out, "# Foo") {
-		t.Error("empty title should fall back to page id in the heading")
+	if !strings.Contains(out, "title: Foo") {
+		t.Error("empty title should fall back to page id in the front matter")
 	}
 	if !strings.Contains(out, "[No extracted content]") {
 		t.Error("empty body should emit the no-content marker")
 	}
-	if n := strings.Count(out, "A -> a.html"); n != 1 {
-		t.Errorf("duplicate link not deduped: appeared %d times", n)
+	for _, banned := range []string{"# Foo", "Source:", "Canonical:", "## Content\n"} {
+		if strings.Contains(out, banned) {
+			t.Errorf("body must not repeat front-matter metadata, found %q", banned)
+		}
+	}
+	if n := strings.Count(out, "-> a.html"); n != 2 {
+		t.Errorf("want the deduped a.html link plus its distinct-fragment variant, got %d a.html links", n)
+	}
+	if strings.Contains(out, "A2") {
+		t.Error("second text for an already-seen href should be dropped")
+	}
+	for _, banned := range []string{"Foo.html", "#top"} {
+		if strings.Contains(strings.SplitN(out, "## Content Links", 2)[1], banned) {
+			t.Errorf("self or fragment-only link leaked into Content Links: %q", banned)
+		}
+	}
+	if got := string(writeMarkdown(rec, []link{{"Self", "Foo.html"}})); strings.Contains(got, "## Content Links") {
+		t.Error("Content Links header must be omitted when every link is filtered out")
 	}
 }

@@ -36,11 +36,12 @@ suffix-less (`bin/unity-doc-corpus`); on Windows they resolve to the `.exe` auto
 
    Only the `Manual` and `ScriptReference` subtrees are extracted (in parallel, straight to
    the destination - the rest of the zip is not read by `build`). `--workers` sets the
-   extraction worker count (default: logical CPUs). After a successful extraction the
-   downloaded zip is deleted to reclaim space (~475 MB); pass `--keep-zip` to cache it for a
-   later re-fetch. `--destination` defaults to `unity-docs`; `--resolve-only` prints the
-   resolved zip URL without downloading; `--force` replaces an existing destination directory;
-   the download cache defaults to `<os-temp>/unity-doc-downloads` (`--cache-root` moves it).
+   extraction worker count (default: logical CPUs). After extraction the zip is kept in the
+   destination as the ground-truth artifact (~475 MB); pass `--delete-zip` to drop it and
+   accept online-only verification. `--destination` defaults to `unity-docs`;
+   `--resolve-only` prints the resolved zip URL without downloading; `--force` replaces an
+   existing destination directory (reusing its retained zip when the version matches); the
+   download cache defaults to `<os-temp>/unity-doc-downloads` (`--cache-root` moves it).
 
 3. Build or refresh the derived corpus:
 
@@ -49,16 +50,24 @@ suffix-less (`bin/unity-doc-corpus`); on Windows they resolve to the `.exe` auto
    ```
 
    `--workers` defaults to half the logical CPUs; lower it to keep the machine responsive.
+   After a successful build the extracted HTML is pruned (only when the fetch marker and
+   the retained zip are both present - the zip rematerializes it on the next `build`
+   automatically). Pass `--keep-source` to keep the extracted tree; do that whenever
+   iterating on the transform, so repeated rebuilds skip the re-extraction.
 
 4. Sanity-check the output: `unity-docs/_agent/manifest.json` reports page count and byte
    ratios; `unity-docs/_agent/index.md` describes the corpus layout and lookup order. Quick
    lookup smoke test: `bin/unity-doc-corpus search --corpus unity-docs/_agent "physics"`.
 
 The builder never modifies the original HTML: it writes a derived `_agent` directory beside
-it and records a SHA-256 per source page. Keep the originals intact - the lookup skill's
-verification step depends on them.
+it and records a SHA-256 per source page. The lookup skill's verification step reads
+originals through `bin/unity-doc-corpus source <source_rel>`, which serves them from the
+extracted tree or straight out of the retained zip - keep at least the zip.
 
 ## Maintenance (builder changes)
+
+All three comparisons below read the extracted HTML (`--source unity-docs`), so build with
+`--keep-source` first when the tree was pruned.
 
 - Compare two corpora after changing the builder:
   `python scripts/compare_corpus.py --source unity-docs --baseline .cache/corpus-baseline --candidate unity-docs/_agent`

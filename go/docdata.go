@@ -108,7 +108,15 @@ func writeMarkdown(rec record, links []link) []byte {
 
 	fmt.Fprintf(&b, "page_id: %s\n", strings.Trim(jsonString(rec.PageID), `"`))
 
-	fmt.Fprintf(&b, "title: %s\n", strings.Trim(jsonString(rec.Title), `"`))
+	title := rec.Title
+
+	if title == "" {
+
+		title = rec.PageID
+
+	}
+
+	fmt.Fprintf(&b, "title: %s\n", strings.Trim(jsonString(title), `"`))
 
 	fmt.Fprintf(&b, "source_rel: %s\n", rec.SourceRel)
 
@@ -118,30 +126,6 @@ func writeMarkdown(rec record, links []link) []byte {
 
 	b.WriteString("---\n\n")
 
-	title := rec.Title
-
-	if title == "" {
-
-		title = rec.PageID
-
-	}
-
-	fmt.Fprintf(&b, "# %s\n\n", title)
-
-	fmt.Fprintf(&b, "Source: `%s`\n", rec.SourceRel)
-
-	if rec.CanonicalURL != "" {
-
-		fmt.Fprintf(&b, "Canonical: %s\n", rec.CanonicalURL)
-
-	}
-
-	if rec.UnityVersion != "" {
-
-		fmt.Fprintf(&b, "Version: %s\n", rec.UnityVersion)
-
-	}
-
 	body := rec.Body
 
 	if body == "" {
@@ -150,27 +134,47 @@ func writeMarkdown(rec record, links []link) []byte {
 
 	}
 
-	b.WriteString("\n## Content\n\n")
-
 	b.WriteString(body)
 
-	if len(links) > 0 {
+	selfRef := rec.SourceRel
 
-		b.WriteString("\n\n## Content Links")
+	if idx := strings.LastIndexByte(selfRef, '/'); idx >= 0 {
 
-		seen := map[link]bool{}
+		selfRef = selfRef[idx+1:]
 
-		for _, l := range links {
+	}
 
-			if !seen[l] {
+	wroteHeader := false
 
-				seen[l] = true
+	seen := map[string]bool{}
 
-				fmt.Fprintf(&b, "\n- %s -> %s", l.Text, l.Href)
+	for _, l := range links {
 
-			}
+		target := l.Href
+
+		if idx := strings.IndexByte(target, '#'); idx >= 0 {
+
+			target = target[:idx]
 
 		}
+
+		if target == "" || target == selfRef || seen[l.Href] {
+
+			continue
+
+		}
+
+		seen[l.Href] = true
+
+		if !wroteHeader {
+
+			b.WriteString("\n\n## Content Links")
+
+			wroteHeader = true
+
+		}
+
+		fmt.Fprintf(&b, "\n- %s -> %s", l.Text, l.Href)
 
 	}
 

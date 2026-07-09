@@ -28,7 +28,7 @@ ones. The agent needs a documentation lookup path that is:
 
 The naive offline baseline - grepping the official offline documentation zip - fails
 the first requirement badly (648 MB of HTML for Unity 6000.3) and, as the benchmark
-below shows, is also much worse at actually finding the right page.
+below shows, is ~70x slower per lookup and far worse at finding concept pages.
 
 ## Constraints
 
@@ -42,12 +42,14 @@ below shows, is also much worse at actually finding the right page.
 3. **Plain-file outputs.** Consumers are agents with stock tools: grep, SQLite, a file
    reader. No server process, no daemon, no protocol dependency. Everything in the
    corpus is a text file or a SQLite database.
-4. **Originals untouched.** The builder writes only into its output directory (guarded
-   by a marker file so it never deletes a directory it did not create). Source HTML,
-   assets, and docdata stay intact next to the derived corpus.
+4. **Originals untouched.** Both writers are marker-guarded: `build` only replaces an
+   output directory carrying its own corpus marker, and `fetch --force` only replaces a
+   destination carrying its own fetch marker. Neither deletes a directory it did not
+   create. Source HTML, assets, and docdata stay intact next to the derived corpus.
 5. **Rebuild is cheap.** A Unity version bump means re-fetch and re-build; the build
-   must be fast enough that pinning to a new version is a non-event (under a minute
-   wall clock on 8 workers for the full 39k-page set).
+   must be fast enough that pinning to a new version is a non-event (~45 s wall clock on
+   8 workers for the full 39k-page set right after fetch; the read stage is I/O-bound,
+   so a cold file cache costs 2-3x that).
 
 ## Design
 
@@ -56,13 +58,33 @@ below shows, is also much worse at actually finding the right page.
 1. **fetch** resolves the offline-docs zip URL from `docs.unity3d.com` and downloads it
    from Unity's `docscloudstorage` bucket - `cloudmedia-docs.unity3d.com` for current
    streams, `storage.googleapis.com/docscloudstorage/` for 2019.4 and older; all locations
-   pinned in `go/fetch.go` and nothing else is ever fetched - then extracts just the
-   `Manual/` and `ScriptReference/` subtrees (the only parts `build` reads) in a parallel
-   worker pool, straight to the destination.
+   pinned in `go/fetch.go`, enforced on every redirect hop (an off-host redirect fails the
+   download), and nothing else is ever fetched. It prints the zip's SHA-256, extracts just
+   the `Manual/` and `ScriptReference/` subtrees (the only parts `build` reads) in a
+   parallel worker pool, and stamps a `.unity-doc-fetch` marker (version, zip URL, zip
+   SHA-256, retained zip name) that `build` surfaces as `unity_version` in
+   `manifest.json`. Unity publishes no reference checksum for the zip: TLS to the pinned
+   hosts is the integrity control, and the corpus's per-page SHA-256 chain proves
+   derived-page-to-local-HTML consistency, not provenance.
 2. **build** walks the `Manual/` and `ScriptReference/` HTML trees and transforms every
    page in a worker pool (default: half the logical CPUs). Output order is deterministic:
    files are discovered in sorted order and results are written by job index, so two
    builds of the same zip produce byte-identical `pages.jsonl` and `search_index.tsv`.
+
+### Artifact lifecycle
+
+The retained zip is the ground-truth artifact; the extracted HTML tree is a disposable
+cache materialized from it. `fetch` keeps the zip in the destination directory
+(`--delete-zip` opts out), and `build` prunes the extracted tree after a successful build -
+but only when both proofs are present: the `.unity-doc-fetch` marker (the tool created the
+tree, it is not someone's own docs directory) and the retained zip it names (nothing is
+lost). A later `build` rematerializes the tree from the zip automatically; `--keep-source`
+keeps it around, which is what you want while iterating on the transform itself. The
+`source` verb prints any page's original HTML from whichever home is on disk - the
+extracted tree or, via cheap random access, the zip member - so per-page verification
+never needs a full re-extract. Steady state on disk: the zip (~475 MB for 6000.3) plus
+the derived corpus (~190 MB); delete the zip too and verification falls back to fetching
+the page's `canonical_url` online.
 
 ### HTML transform
 
@@ -70,7 +92,9 @@ The parser (`go/html_parser.go`) is a single-pass tag scanner written for Unity'
 uniform doc-page structure, not a general HTML engine. Content extraction is anchored
 at the `content-wrap` container; page chrome is dropped by a class/id/role blocklist
 (sidebar, header, footer, toolbar, search, feedback, version switcher, language
-switcher, navigation). `script`/`style`/`svg` subtrees are skipped outright. The parser
+switcher, navigation, breadcrumbs, prev/next page arrows, glossary-tooltip popups,
+the Switch to Manual button).
+`script`/`style`/`svg` subtrees are skipped outright. The parser
 collects the title (overridden by Unity's own `docdata/index.json` title table when
 present), headings, anchor links with their text, the canonical URL, and the flattened
 body text with block-level tags mapped to newlines.
@@ -79,7 +103,7 @@ This is the lossy step, and it is deliberately biased toward recall of *text*: t
 flatten, code blocks lose fencing, inline markup disappears. The bet is that an agent
 searching and skimming needs the words and the structure landmarks (headings, links),
 and anything load-bearing gets verified against the original anyway (see below).
-The result is an 88.3% byte reduction (648 MB -> 76 MB for Unity 6000.3).
+The result is a 90.5% byte reduction (648 MB -> 61 MB for Unity 6000.3).
 
 ### Corpus format
 
@@ -95,11 +119,14 @@ Corpus-level artifacts:
   canonical URL). The exact-name lane: `grep -i "AsyncOperation" search_index.tsv`
   answers API-name lookups without touching a database.
 - `docs.sqlite` - a `pages` metadata table plus a `pages_fts` FTS5 table (title + body)
-  queried with bm25 ranking. If the SQLite driver lacks FTS5 the build degrades
-  gracefully and records the fact in the manifest.
+  queried with bm25 ranking at a 10:1 title:body weighting (unweighted bm25 buries short
+  canonical pages under their member pages; the weight is measured, see the benchmark).
+  If the SQLite driver lacks FTS5 the build degrades gracefully and records the fact in
+  the manifest.
 - `pages.jsonl` - the full per-page metadata records (byte counts, heading lists, link
   counts, both SHA-256 hashes) for tooling and benchmark-case generation.
-- `manifest.json` - build summary: page count, byte totals, derived/source ratio,
+- `manifest.json` - build summary: `unity_version` (from the fetch marker; `unknown` when
+  the docs were not fetched by this tool), page count, byte totals, derived/source ratio,
   per-stage timings, worker count.
 - `index.md` + a `.unity-doc-agent-corpus` marker (the overwrite guard).
 
@@ -123,36 +150,67 @@ bin/unity-doc-corpus-benchmark --source unity-docs --corpus unity-docs/_agent --
 ```
 
 **Cases.** 8 curated lookups (real agent-style queries: API signatures, manual concepts)
-plus 1000 generated cases: for each of the first 1000 pages in `pages.jsonl`, the page
-title (falling back to page id) becomes the query and that page is the expected answer.
+plus 1000 generated cases sampled at an even stride across the whole sorted `pages.jsonl`,
+so the case mix matches the corpus mix (~91% ScriptReference, ~9% Manual). For each
+sampled page, the page title (falling back to page id) becomes the query and that page is
+the expected answer. The sample is deterministic - no RNG, same corpus in, same cases out.
 
-**Lanes.** Each case runs against three search strategies: (a) naive term-scoring scan
-over the raw offline HTML, (b) the same scan over the derived Markdown, and (c) SQLite
-FTS5 with bm25 ranking. A case counts as recalled when the expected page appears in the
-top 10 results.
+**Lanes.** Each case runs against four search strategies - a 2x2 of ranker x
+representation: (a) naive term-scoring scan over the raw offline HTML, (b) the same scan
+over the derived Markdown, (c) FTS5 bm25 over the raw untransformed HTML (built by the
+benchmark into a throwaway index, title from `<title>`, identical ranker settings to the
+shipped lane), and (d) FTS5 bm25 over the shipped corpus. Lane (c) exists to isolate what
+the transform contributes to recall versus what ranking contributes. A case counts as
+recalled when the expected page appears in the top 10 results.
 
-**Results** (Unity 6000.3, 39,056 pages, 1008 cases, 8 workers - the checked-in
-reference run is reproducible with the command above):
+**Results** (Unity 6000.3, 39,056 pages, 1008 cases, 8 workers; the checked-in reference
+run is [benchmark-6000.3.json](benchmark-6000.3.json) - consecutive runs reproduce every
+recall count exactly):
 
-| Lane | Top-10 recall | Mean query time |
-| --- | --- | --- |
-| Raw HTML, naive scan | 576/1008 (57.1%) | ~292 ms |
-| Derived Markdown, naive scan | 609/1008 (60.4%) | ~58 ms |
-| SQLite FTS5 (bm25) | 926/1008 (91.9%) | ~7 ms |
+| Lane | Top-10 recall (all) | Manual pages only | Mean query time |
+| --- | --- | --- | --- |
+| Raw HTML, naive scan | 945/1008 (93.8%) | 55/93 (59.1%) | ~207 ms |
+| Derived Markdown, naive scan | 968/1008 (96.0%) | 66/93 (71.0%) | ~46 ms |
+| FTS5 bm25 over raw HTML | 977/1008 (96.9%) | 89/93 (95.7%) | ~3.6 ms |
+| FTS5 bm25 over the corpus (shipped) | 976/1008 (96.8%) | 88/93 (94.6%) | ~3.0 ms |
 
-Two separate effects are visible. Stripping chrome alone buys only a modest recall gain
-(57% -> 60%) but a 5x scan speedup - the corpus is 11.7% of the source bytes. The recall
-jump comes from ranking: bm25 over clean title+body text finds the right page in the
-top 10 for 91.9% of cases, at ~42x the speed of scanning the raw HTML.
+The four lanes form a ranker x representation matrix, and reading it honestly:
 
-**Honest limits.** Generated cases use page titles as queries, which favors any
-title-aware lane - the curated cases are closer to real agent queries but there are only
-8 of them. Recall@10 says nothing about precision or answer quality. The residual ~8%
-FTS5 misses are mostly pages whose titles share all their terms with many sibling pages
-(landing pages, disambiguation-style manual pages). Timings are from one machine
-(8-worker desktop) and the naive-scan lanes hold the whole corpus in memory, which
-flatters their times. The benchmark measures retrieval, not end-to-end token savings in
-a live agent session.
+- **Ranking, not the transform, owns recall.** Holding bm25 fixed and swapping the
+  representation (raw HTML vs derived corpus) moves recall by one case in a thousand.
+  Anyone with the offline zip and SQLite can have this recall without this tool - the raw
+  index just costs ~860 MB on disk versus the corpus's ~84 MB, and every page read out of
+  it costs ~9x the bytes in an agent's context.
+- **Where ranking matters is concept pages.** On ScriptReference cases every lane
+  saturates - an API page's own name is a near-unique string, so even a naive scan finds
+  it. Manual concept pages, whose titles are ordinary prose, are where naive scanning
+  collapses (59-71%) and bm25 holds (~95%).
+- **The title weighting is measured, not aesthetic.** Unweighted bm25 buries short
+  canonical pages under their member pages (the class page for a bare class-name query);
+  the 10:1 title:body weighting is worth +0.6 points overall and turned the benchmark's
+  longest-standing curated miss (`script execution order`) into a #1 hit. The
+  `search_index.tsv` exact-name lane still answers bare API names without the database.
+- **Speed separates FTS from scanning, not the FTS lanes from each other** (~3 ms either
+  way once an index exists; a naive scan pays ~207 ms per query against raw HTML).
+
+**Honest limits.** Generated cases use page titles as queries - self-retrieval by a
+page's own name - which favors every lane and makes API-name cases outright easy; real
+agent queries are messier. The 8 curated agent-style cases hint at that messier picture
+(naive raw-HTML scan 5/8, shipped FTS5 6/8, raw-HTML FTS5 7/8 - at n=8 this is anecdote,
+not measurement). Recall@10 says nothing about precision or answer quality. The shipped
+FTS5 lane is only one lane of the actual lookup path: the skills route exact API names
+through `search_index.tsv` first, which covers bm25's characteristic miss (bare class
+names ranked below their member pages). The naive-scan baseline scans page content only
+and does not model filename matching, which a real grep workflow would use for API
+names; it also holds the whole corpus in memory, which flatters its times. Timings are
+from one machine (8-worker desktop). The benchmark measures retrieval, not end-to-end
+token savings in a live agent session. Erratum: this repository's initially published
+numbers (91.9% FTS5 vs 57.1% "grep") overstated the recall story twice over - the
+generated cases were the head of the sorted page list (100% Manual pages in a 91%
+ScriptReference corpus), and the decisive baseline, bm25 over the raw HTML, was missing
+entirely. Both are corrected above; the ranking also gained the measured title weighting
+and the transform now strips tooltip/switch-link chrome it previously kept. Full history
+in git.
 
 ## Differentiation
 
@@ -195,7 +253,8 @@ problem via MCP. Key differences:
   doc-derived leaves your machine and nothing doc-derived is in the repo; the legal
   posture is itself a design feature.
 - **Runtime shape.** MCP server process vs. plain files any tool can grep. It claims
-  4-11x token savings in its workflows; it publishes no retrieval-recall numbers.
+  4-11x token savings in its workflows and self-reports 100% search relevance on sampled
+  queries; it ships no reproducible benchmark artifact behind either number.
 
 ### Docset ecosystem (Dash / Zeal / DevDocs)
 
@@ -216,5 +275,6 @@ As of 2026-07-09 no found tool ships the combination: official-offline-zip in,
 locally-derived version-pinned corpus out (Manual + ScriptReference), a SHA-256
 verification path from every derived page to its source, a published recall/latency
 benchmark, and a two-skill router that keeps the expensive path from firing on ordinary
-questions. The benchmark artifact is the sharpest edge - none of the tools above
-publish recall numbers for their retrieval at all.
+questions. The benchmark artifact is the sharpest edge - none of the tools above ship a
+reproducible retrieval benchmark (unity-api-mcp self-reports relevance numbers, but with
+no artifact to rerun).

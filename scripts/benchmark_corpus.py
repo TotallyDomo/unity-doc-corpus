@@ -135,7 +135,7 @@ def sqlite_fts_search(corpus, query, limit=10):
     conn = sqlite3.connect(db_path)
     try:
         rows = conn.execute(
-            "SELECT p.source_rel, p.md_rel, bm25(pages_fts) AS rank FROM pages_fts JOIN pages p ON p.page_key = pages_fts.page_key WHERE pages_fts MATCH ? ORDER BY rank LIMIT ?",
+            "SELECT p.source_rel, p.md_rel, bm25(pages_fts, 0.0, 10.0, 1.0) AS rank FROM pages_fts JOIN pages p ON p.page_key = pages_fts.page_key WHERE pages_fts MATCH ? ORDER BY rank LIMIT ?",
             (fts_query, limit),
         ).fetchall()
     except sqlite3.OperationalError as exc:

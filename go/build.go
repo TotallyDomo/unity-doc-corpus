@@ -67,7 +67,6 @@ func transformOne(sourceAbs, outputAbs string, titles map[string]map[string]stri
 		SourceBytes:  len(raw),
 		SourceRel:    filepath.ToSlash(sourceRel),
 		Title:        title,
-		UnityVersion: parsed.Version,
 		Body:         parsed.Body,
 	}
 	_ = timer.measure("hash_source", func() error {
@@ -92,7 +91,7 @@ func transformOne(sourceAbs, outputAbs string, titles map[string]map[string]stri
 	return transformResult{Record: rec}
 }
 
-func build(source, output string, workers int) error {
+func build(source, output string, workers int, keepSource bool) error {
 	start := time.Now()
 	timer := newStageTimer()
 	if workers < 1 {
@@ -100,7 +99,17 @@ func build(source, output string, workers int) error {
 	}
 	sourceAbs, _ := filepath.Abs(source)
 	outputAbs, _ := filepath.Abs(output)
-	for _, required := range []string{"Manual", "ScriptReference"} {
+	// Zip-only steady state: when the extracted tree was pruned after an earlier build,
+	// rematerialize it from the retained zip before checking for the section folders.
+	if !sectionsPresent(sourceAbs) {
+		if zipPath, ok := retainedZipPath(sourceAbs); ok {
+			fmt.Fprintln(os.Stderr, "Extracted docs absent; rematerializing from retained zip:", zipPath)
+			if err := extractSections(zipPath, sourceAbs, workers); err != nil {
+				return fmt.Errorf("rematerializing docs from %s: %w", zipPath, err)
+			}
+		}
+	}
+	for _, required := range sectionDirs {
 		if info, err := os.Stat(filepath.Join(sourceAbs, required)); err != nil || !info.IsDir() {
 			return fmt.Errorf("missing required documentation folder: %s", filepath.Join(sourceAbs, required))
 		}
@@ -232,8 +241,15 @@ func build(source, output string, workers int) error {
 	if err := timer.measure("sqlite_commit", func() error { return tx.Commit() }); err != nil {
 		return err
 	}
+	unityVersion := "unknown"
+	if info, ok := readFetchInfo(sourceAbs); ok && info.UnityVersion != "" {
+		unityVersion = info.UnityVersion
+	} else {
+		fmt.Fprintf(os.Stderr, "warning: no %s marker under %s (docs not fetched by this tool?); manifest unity_version = unknown\n", fetchMarkerName, sourceAbs)
+	}
 	manifest := map[string]any{
 		"generated_at_utc":        time.Now().UTC().Format(time.RFC3339Nano),
+		"unity_version":           unityVersion,
 		"source_root":             sourceAbs,
 		"output_root":             outputAbs,
 		"sections":                []string{"Manual", "ScriptReference"},
@@ -244,7 +260,7 @@ func build(source, output string, workers int) error {
 		"sqlite_fts5":             fts5,
 		"worker_count":            workers,
 		"files":                   map[string]string{"pages_jsonl": "pages.jsonl", "search_index_tsv": "search_index.tsv", "sqlite": "docs.sqlite", "text_root": "text"},
-		"no_data_loss_note":       "Original Manual and ScriptReference HTML (and their docdata) are left intact. Derived Markdown strips page chrome for agent lookup and records source paths plus SHA-256 hashes for every transformed HTML page.",
+		"no_data_loss_note":       "The original HTML stays available: via the retained offline zip (see the .unity-doc-fetch marker and the source verb), or the extracted tree when built with --keep-source. Derived Markdown strips page chrome for agent lookup and records source paths plus SHA-256 hashes for every transformed HTML page.",
 	}
 	if err := timer.measure("write_index", func() error {
 		return os.WriteFile(filepath.Join(outputAbs, "index.md"), []byte(indexMarkdown(pageCount, totalSourceBytes, totalTextBytes, fts5)), 0644)
@@ -266,12 +282,47 @@ func build(source, output string, workers int) error {
 	}
 	os.Stdout.Write(manifestBytes)
 	fmt.Fprintf(os.Stderr, "Corpus built: %d pages -> %s\n", pageCount, outputAbs)
+	if !keepSource {
+		pruneExtractedSource(sourceAbs)
+	}
 	searchCmd := "bin/unity-doc-corpus search"
 	if filepath.Clean(output) != filepath.Clean(defaultCorpusDir) {
 		searchCmd += " --corpus " + output
 	}
 	fmt.Fprintf(os.Stderr, "Try: %s \"rigidbody interpolation\"\n", searchCmd)
 	return nil
+}
+
+// sectionsPresent reports whether every section folder the build consumes exists under root.
+func sectionsPresent(root string) bool {
+	for _, section := range sectionDirs {
+		if info, err := os.Stat(filepath.Join(root, section)); err != nil || !info.IsDir() {
+			return false
+		}
+	}
+	return true
+}
+
+// pruneExtractedSource deletes the extracted section trees after a successful build, but
+// only when both proofs are present: the fetch marker (this tool created the tree, it is
+// not someone's own docs directory) and the retained zip it names (the tree can be
+// rematerialized, so no information is lost). Anything else is left untouched.
+func pruneExtractedSource(sourceAbs string) {
+	if _, ok := readFetchInfo(sourceAbs); !ok {
+		return
+	}
+	zipPath, ok := retainedZipPath(sourceAbs)
+	if !ok {
+		fmt.Fprintln(os.Stderr, "Extracted HTML kept: no retained zip to rematerialize it from (fetch ran with --delete-zip?).")
+		return
+	}
+	for _, section := range sectionDirs {
+		if err := os.RemoveAll(filepath.Join(sourceAbs, section)); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: pruning %s: %v\n", filepath.Join(sourceAbs, section), err)
+			return
+		}
+	}
+	fmt.Fprintf(os.Stderr, "Pruned extracted HTML (retained zip: %s); pass --keep-source to keep it next time.\n", zipPath)
 }
 
 func indexMarkdown(pageCount, sourceBytes, textBytes int, fts5 bool) string {

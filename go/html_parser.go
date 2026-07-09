@@ -8,7 +8,7 @@ import (
 
 var skipTags = map[string]bool{"script": true, "style": true, "template": true, "noscript": true, "svg": true}
 var voidTags = map[string]bool{"area": true, "base": true, "br": true, "col": true, "embed": true, "hr": true, "img": true, "input": true, "link": true, "meta": true, "param": true, "source": true, "track": true, "wbr": true}
-var skipClassOrID = []string{"header", "header-wrapper", "sidebar", "sidebar-wrap", "sidebar-menu", "search-form", "apisearch", "toolbar", "footer", "footer-wrapper", "suggest", "suggest-wrap", "lang-switcher", "otherversionscontent", "version-number", "scrolltofeedback", "feedback", "mobilelogo", "navigation"}
+var skipClassOrID = []string{"header", "header-wrapper", "sidebar", "sidebar-wrap", "sidebar-menu", "search-form", "apisearch", "toolbar", "footer", "footer-wrapper", "suggest", "suggest-wrap", "lang-switcher", "otherversionscontent", "version-number", "scrolltofeedback", "feedback", "mobilelogo", "navigation", "switch-link", "tooltiptext", "breadcrumbs", "nextprev"}
 
 func findTagEnd(text string, start int) int {
 	quote := byte(0)
@@ -123,7 +123,11 @@ func (p *unityParser) start(tag string, attrs map[string]string) {
 	if tag == "link" && strings.ToLower(attrs["rel"]) == "canonical" {
 		p.page.Canonical = attrs["href"]
 	}
-	identity := strings.ToLower(attrs["id"] + " " + attrs["class"] + " " + attrs["role"] + " " + attrs["aria-label"])
+	// Match chrome tokens against structural attributes only. aria-label is human-readable prose
+	// (e.g. "Go to Android.AndroidNavigation.Undefined.html") that substring-matched skip tokens
+	// like "navigation"/"header" and silently dropped enum/property member-name links; the audit
+	// caught it (M0042-S0001). All chrome containers are identified by class/id/role.
+	identity := strings.ToLower(attrs["id"] + " " + attrs["class"] + " " + attrs["role"])
 	identitySkip := false
 	for _, token := range skipClassOrID {
 		if strings.Contains(identity, token) {
@@ -132,18 +136,19 @@ func (p *unityParser) start(tag string, attrs map[string]string) {
 		}
 	}
 	if p.skipDepth > 0 || skipTags[tag] || identitySkip {
-		p.skipDepth++
-		if voidTags[tag] {
-			p.skipDepth--
+		if !voidTags[tag] {
+			p.skipDepth++
 		}
 		return
 	}
-	if p.contentDepth > 0 {
-		p.contentDepth++
-	} else if strings.ToLower(attrs["id"]) == "content-wrap" || strings.Contains(strings.ToLower(attrs["class"]), "content-wrap") {
-		p.contentDepth++
+	if !voidTags[tag] {
+		if p.contentDepth > 0 {
+			p.contentDepth++
+		} else if strings.ToLower(attrs["id"]) == "content-wrap" || strings.Contains(strings.ToLower(attrs["class"]), "content-wrap") {
+			p.contentDepth++
+		}
 	}
-	if p.collecting() && (tag == "p" || tag == "div" || tag == "section" || tag == "table" || tag == "tr" || tag == "ul" || tag == "ol" || tag == "li" || tag == "pre" || tag == "blockquote") {
+	if p.collecting() && (tag == "p" || tag == "div" || tag == "section" || tag == "table" || tag == "tr" || tag == "td" || tag == "th" || tag == "ul" || tag == "ol" || tag == "li" || tag == "pre" || tag == "blockquote") {
 		p.parts = append(p.parts, "\n")
 	}
 	if p.collecting() && (tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4") {
@@ -162,6 +167,11 @@ func (p *unityParser) start(tag string, attrs map[string]string) {
 }
 
 func (p *unityParser) end(tag string) {
+	// Void tags never opened a depth level in start(), so a stray </br> or the
+	// synthetic end() for self-closing <br/> must not unbalance skip/content depth.
+	if voidTags[tag] {
+		return
+	}
 	if tag == "title" {
 		p.inTitle = false
 		p.page.Title = compactText(strings.Join(p.titleParts, ""))
@@ -188,7 +198,7 @@ func (p *unityParser) end(tag string) {
 		p.anchorHref = ""
 		p.anchorParts = nil
 	}
-	if p.collecting() && (tag == "p" || tag == "div" || tag == "section" || tag == "table" || tag == "tr" || tag == "ul" || tag == "ol" || tag == "li" || tag == "pre" || tag == "blockquote") {
+	if p.collecting() && (tag == "p" || tag == "div" || tag == "section" || tag == "table" || tag == "tr" || tag == "td" || tag == "th" || tag == "ul" || tag == "ol" || tag == "li" || tag == "pre" || tag == "blockquote") {
 		p.parts = append(p.parts, "\n")
 	}
 	if p.contentDepth > 0 {
@@ -203,12 +213,6 @@ func (p *unityParser) data(value string) {
 	}
 	if p.skipDepth > 0 {
 		return
-	}
-	if p.page.Version == "" && strings.Contains(value, "Version:") {
-		version := compactText(value)
-		if version != "" {
-			p.page.Version = version
-		}
 	}
 	if !p.collecting() {
 		return

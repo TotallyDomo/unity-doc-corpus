@@ -1,6 +1,12 @@
 package main
 
-import "testing"
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 // tokenize drives retrieval: tokens are lowercased and single-character tokens dropped.
 // With fts=false the '.', '_', '-' joiners stay inside a token (so "Rigidbody.MovePosition"
@@ -78,5 +84,64 @@ func TestContainsHelpers(t *testing.T) {
 	}
 	if !containsString([]string{"a", "b"}, "b") || containsString([]string{"a"}, "z") {
 		t.Error("containsString wrong")
+	}
+}
+
+// extractHTMLTitle feeds the raw-HTML FTS5 baseline's title column; it must survive
+// attribute-free tags, entities, and whitespace, and return "" when no title exists.
+func TestExtractHTMLTitle(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"<html><head><title>Unity - Scripting API:  Rigidbody</title></head>", "Unity - Scripting API: Rigidbody"},
+		{"<TITLE>a &amp; b</TITLE>", "a & b"},
+		{"<html><body>no title</body></html>", ""},
+	}
+	for _, c := range cases {
+		if got := extractHTMLTitle(c.in); got != c.want {
+			t.Errorf("extractHTMLTitle(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// generatedCases must sample evenly across the whole (sorted) pages.jsonl, not take its
+// head: pages.jsonl sorts Manual before ScriptReference, so a head slice would test only
+// Manual pages while the corpus is ~91% ScriptReference.
+func TestGeneratedCasesStrideSampleSpansCorpus(t *testing.T) {
+	dir := t.TempDir()
+	var lines []string
+	for i := 0; i < 300; i++ {
+		lines = append(lines, fmt.Sprintf(`{"source_rel":"Manual/page%03d.html","title":"Manual Page %03d","page_id":"page%03d"}`, i, i, i))
+	}
+	for i := 0; i < 700; i++ {
+		lines = append(lines, fmt.Sprintf(`{"source_rel":"ScriptReference/Class%03d.html","title":"Class%03d.Member","page_id":"Class%03d"}`, i, i, i))
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pages.jsonl"), []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cases, err := generatedCases(dir, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cases) != 100 {
+		t.Fatalf("expected 100 cases, got %d", len(cases))
+	}
+	manual, script := 0, 0
+	for _, c := range cases {
+		if strings.HasPrefix(c.Expected, "Manual/") {
+			manual++
+		} else {
+			script++
+		}
+	}
+	if manual != 30 || script != 70 {
+		t.Errorf("sample mix = %d Manual / %d ScriptReference, want 30/70 (corpus proportions)", manual, script)
+	}
+
+	all, err := generatedCases(dir, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 1000 {
+		t.Errorf("limit above corpus size should return every eligible page, got %d", len(all))
 	}
 }
