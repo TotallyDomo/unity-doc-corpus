@@ -24,9 +24,10 @@ Run all commands from the repository root. Invocations are written suffix-less
    cd ..
    ```
 
-   On Windows, `go build` does not add `.exe` to an explicit `-o` name, so a binary built
-   as above will not run: run `scripts\build.ps1` from PowerShell instead (it writes the two
-   `.exe` binaries), or append `.exe` to both `-o` names above.
+   On Windows, `go build` does not add `.exe` to an explicit `-o` name, so append `.exe` to
+   both `-o` names above (e.g. `-o ../bin/unity-doc-corpus.exe`) or the binary will not run.
+   `scripts\build.ps1` does both builds, but stock Windows blocks `.ps1` execution; if so run
+   it as `powershell -ExecutionPolicy Bypass -File scripts\build.ps1`.
 
 2. Fetch the offline docs for the requested Unity version stream (a several-hundred-MB
    download from Unity's official hosts; ~475 MB for 6000.3):
