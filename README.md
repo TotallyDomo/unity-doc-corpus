@@ -33,7 +33,8 @@ HTML.
 ## How it works
 
 1. `fetch` downloads Unity's official offline docs zip (only from `docs.unity3d.com` /
-   `cloudmedia-docs.unity3d.com`) and unpacks it locally.
+   `cloudmedia-docs.unity3d.com`) and extracts just the Manual and Scripting API reference
+   from it - the parts the corpus is built from - in parallel, straight to disk.
 2. `build` walks the Manual and ScriptReference HTML and derives, per page: stripped
    Markdown (`text/`), metadata with source path and SHA-256 (`pages.jsonl`), a SQLite FTS5
    index (`docs.sqlite`), and an exact-name lookup table (`search_index.tsv`).
@@ -44,9 +45,11 @@ Scope: the corpus contains what Unity's offline zip contains - the Manual and th
 API reference. Some package manuals (URP, for example) are bundled into the Unity Manual;
 most package API reference (`com.unity.*`) ships separately per package and is not included.
 
-The builder is Unity-specific; the pattern is not - a write-up on the generic
-searchable-docs -> offline-fetch -> agent-transform -> router-skill shape is planned (see
-`docs/DESIGN.md`).
+The full technical design - constraints, corpus format, benchmark methodology, and how
+this differs from Context7, unity-api-mcp, and the docset ecosystem - is in
+[docs/DESIGN.md](docs/DESIGN.md). The builder is Unity-specific; the pattern is not - a
+separate write-up on the generic searchable-docs -> offline-fetch -> agent-transform ->
+router-skill shape is planned.
 
 ## Quickstart
 
@@ -61,16 +64,20 @@ cd go
 go build -trimpath -o ../bin/unity-doc-corpus .
 go build -trimpath -o ../bin/unity-doc-corpus-benchmark ./cmd/benchmark
 cd ..
-# Windows: append .exe to the -o names, or run scripts/build.ps1
+# Windows: `go build` does NOT add .exe to an explicit -o name, so a binary built as above
+# will not run. Use `scripts\build.ps1` from PowerShell (it writes the two .exe files), or
+# append .exe to both -o paths yourself.
 
-# 2. Fetch Unity's official offline docs (one-time per version; ~475 MB for 6000.3)
+# 2. Fetch Unity's official offline docs (one-time per version; ~475 MB for 6000.3).
+#    The zip is deleted after extraction to save space; add --keep-zip to cache it.
 bin/unity-doc-corpus fetch --version 6000.3
 
 # 3. Build the derived corpus (writes unity-docs/_agent)
 bin/unity-doc-corpus build --source unity-docs --output unity-docs/_agent
 
-# 4. Try a lookup (no sqlite3 CLI? Python's built-in sqlite3 module runs the same query)
-sqlite3 unity-docs/_agent/docs.sqlite "SELECT p.title, p.md_rel FROM pages_fts f JOIN pages p ON p.page_key = f.page_key WHERE pages_fts MATCH 'addressables memory' ORDER BY bm25(pages_fts) LIMIT 5;"
+# 4. Try a lookup - built-in FTS5 search, no sqlite3 CLI or Python needed
+#    (Windows: bin\unity-doc-corpus.exe search ...)
+bin/unity-doc-corpus search "addressables memory"
 ```
 
 ## Agent skills

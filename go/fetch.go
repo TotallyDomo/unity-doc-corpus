@@ -5,12 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -18,6 +19,14 @@ import (
 // directory. It is deliberately not an absolute machine path so the tool stays project- and
 // workstation-independent; pass --destination to place the docs anywhere.
 const defaultFetchDestination = "unity-docs"
+
+// sectionDirs are the documentation subtrees the corpus builder consumes (their nested
+// docdata/ is included because it holds page titles). Everything else in Unity's offline zip
+// - StaticFiles, StaticFilesManual, uploads, top-level images - is read by neither the build
+// step nor the source-verification path, so fetch skips it entirely. Extracting only these
+// subtrees is the bulk of the speedup: no unwanted bytes are written, and there is no second
+// copy pass.
+var sectionDirs = []string{"Manual", "ScriptReference"}
 
 var httpClient = &http.Client{Timeout: 30 * time.Minute}
 
@@ -27,21 +36,26 @@ func runFetch(args []string) {
 	fs := flag.NewFlagSet("fetch", flag.ExitOnError)
 	version := fs.String("version", "", "Unity major.minor documentation stream, e.g. 6000.3.")
 	destination := fs.String("destination", defaultFetchDestination, "Directory to populate with Manual/ScriptReference docs.")
-	cacheRoot := fs.String("cache-root", "", "Download/extract cache dir. Defaults to <os-temp-dir>/unity-doc-downloads.")
+	cacheRoot := fs.String("cache-root", "", "Download cache dir. Defaults to <os-temp-dir>/unity-doc-downloads.")
+	workers := fs.Int("workers", 0, "Parallel extraction workers. Defaults to the number of logical CPUs.")
 	force := fs.Bool("force", false, "Replace an existing destination directory.")
+	keepZip := fs.Bool("keep-zip", false, "Keep the downloaded zip in the cache after extraction (default: delete it to reclaim space).")
 	resolveOnly := fs.Bool("resolve-only", false, "Print the resolved zip URL and exit without downloading.")
 	_ = fs.Parse(args)
 	if *version == "" {
-		fmt.Fprintln(os.Stderr, "Usage: unity-doc-corpus fetch --version <ver> [--destination <dir>] [--cache-root <dir>] [--force] [--resolve-only]")
+		fmt.Fprintln(os.Stderr, "Usage: unity-doc-corpus fetch --version <ver> [--destination <dir>] [--cache-root <dir>] [--workers N] [--force] [--keep-zip] [--resolve-only]")
 		os.Exit(2)
 	}
-	if err := fetch(*version, *destination, *cacheRoot, *force, *resolveOnly); err != nil {
+	if err := fetch(*version, *destination, *cacheRoot, *workers, *force, *keepZip, *resolveOnly); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
-func fetch(version, destination, cacheRoot string, force, resolveOnly bool) error {
+func fetch(version, destination, cacheRoot string, workers int, force, keepZip, resolveOnly bool) error {
+	if workers < 1 {
+		workers = runtime.NumCPU()
+	}
 	zipURL, err := resolveZipURL(version)
 	if err != nil {
 		return err
@@ -71,8 +85,6 @@ func fetch(version, destination, cacheRoot string, force, resolveOnly bool) erro
 	}
 
 	zipPath := filepath.Join(cacheAbs, version+"-UnityDocumentation.zip")
-	extractPath := filepath.Join(cacheAbs, version+"-expanded")
-
 	if _, err := os.Stat(zipPath); err != nil {
 		fmt.Fprintf(os.Stderr, "Downloading to %s\n", zipPath)
 		if err := downloadFile(zipURL, zipPath); err != nil {
@@ -82,21 +94,6 @@ func fetch(version, destination, cacheRoot string, force, resolveOnly bool) erro
 		fmt.Fprintln(os.Stderr, "Using cached zip:", zipPath)
 	}
 
-	if err := os.RemoveAll(extractPath); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(extractPath, 0o755); err != nil {
-		return err
-	}
-	fmt.Fprintln(os.Stderr, "Extracting zip to", extractPath)
-	if err := unzip(zipPath, extractPath); err != nil {
-		return err
-	}
-
-	docRoot, err := findDocRoot(extractPath)
-	if err != nil {
-		return err
-	}
 	if force {
 		if err := os.RemoveAll(destAbs); err != nil {
 			return err
@@ -105,10 +102,23 @@ func fetch(version, destination, cacheRoot string, force, resolveOnly bool) erro
 	if err := os.MkdirAll(destAbs, 0o755); err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stderr, "Copying documentation files to", destAbs)
-	if err := copyTree(docRoot, destAbs); err != nil {
+	fmt.Fprintf(os.Stderr, "Extracting %s to %s (%d workers)\n", strings.Join(sectionDirs, " + "), destAbs, workers)
+	if err := extractSections(zipPath, destAbs, workers); err != nil {
 		return err
 	}
+
+	// The pre-selective pipeline expanded the whole zip into <ver>-expanded before copying;
+	// current fetch never creates it, so remove any leftover to keep the cache lean.
+	os.RemoveAll(filepath.Join(cacheAbs, version+"-expanded"))
+	// The zip is only needed during extraction - build reads the extracted docs, not the
+	// archive - so delete it by default to reclaim ~475 MB. --keep-zip retains the cache for
+	// a later re-fetch (e.g. reusing one download across several builds).
+	if !keepZip {
+		if err := os.Remove(zipPath); err == nil {
+			fmt.Fprintln(os.Stderr, "Removed cached zip (pass --keep-zip to retain):", zipPath)
+		}
+	}
+
 	fmt.Fprintln(os.Stderr, "Done. Source root for the corpus builder:", destAbs)
 	fmt.Println(destAbs)
 	return nil
@@ -171,7 +181,11 @@ func downloadFile(url, dest string) error {
 	return os.Rename(tmp, dest)
 }
 
-func unzip(zipPath, dest string) error {
+// extractSections extracts only the Manual and ScriptReference subtrees from the offline docs
+// zip, strips the doc-root prefix so they land at the top of dest, and writes files in
+// parallel. It replaces the former unzip-everything-then-copy pipeline: nothing is written
+// twice and the unused ~half of the archive (static assets, uploads) is never touched.
+func extractSections(zipPath, dest string, workers int) error {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return err
@@ -181,29 +195,142 @@ func unzip(zipPath, dest string) error {
 	if err != nil {
 		return err
 	}
+	prefix, err := findSectionPrefix(r.File)
+	if err != nil {
+		return err
+	}
+
+	type job struct {
+		file   *zip.File
+		target string
+	}
+	var jobs []job
 	for _, f := range r.File {
-		target := filepath.Join(destAbs, f.Name)
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		rel := strings.TrimPrefix(filepath.ToSlash(f.Name), prefix)
+		if !underSection(rel) {
+			continue
+		}
+		target := filepath.Join(destAbs, filepath.FromSlash(rel))
 		// Zip-slip guard: reject entries that resolve outside the destination.
 		if target != destAbs && !strings.HasPrefix(target, destAbs+string(os.PathSeparator)) {
 			return fmt.Errorf("zip entry escapes destination: %s", f.Name)
 		}
-		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(target, 0o755); err != nil {
-				return err
+		jobs = append(jobs, job{file: f, target: target})
+	}
+	if len(jobs) == 0 {
+		return fmt.Errorf("no %s entries found under %q in %s", strings.Join(sectionDirs, "/"), prefix, zipPath)
+	}
+
+	if workers < 1 {
+		workers = 1
+	}
+	var (
+		mu       sync.Mutex
+		firstErr error
+	)
+	fail := func(err error) {
+		mu.Lock()
+		if firstErr == nil {
+			firstErr = err
+		}
+		mu.Unlock()
+	}
+	failed := func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return firstErr != nil
+	}
+	jobCh := make(chan job)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range jobCh {
+				if failed() {
+					continue // keep draining so the producer never blocks
+				}
+				if err := writeZipEntry(j.file, j.target); err != nil {
+					fail(err)
+				}
 			}
-			continue
-		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return err
-		}
-		if err := writeZipEntry(f, target); err != nil {
-			return err
+		}()
+	}
+	for _, j := range jobs {
+		jobCh <- j
+	}
+	close(jobCh)
+	wg.Wait()
+	return firstErr
+}
+
+// findSectionPrefix returns the path prefix (with a trailing slash, or empty for a
+// zip-root layout) under which every entry in sectionDirs lives - the analogue of the
+// documentation root the builder expects, computed from zip entry names without extracting.
+func findSectionPrefix(files []*zip.File) (string, error) {
+	// prefix -> set of sectionDirs that have a child entry under it.
+	seen := map[string]map[string]bool{}
+	for _, f := range files {
+		segs := strings.Split(filepath.ToSlash(f.Name), "/")
+		for i, seg := range segs {
+			// The section segment must have a child (i+1 < len) so we only count
+			// prefixes where the section directory actually holds content.
+			if i+1 >= len(segs) {
+				continue
+			}
+			for _, section := range sectionDirs {
+				if seg != section {
+					continue
+				}
+				prefix := strings.Join(segs[:i], "/")
+				if prefix != "" {
+					prefix += "/"
+				}
+				if seen[prefix] == nil {
+					seen[prefix] = map[string]bool{}
+				}
+				seen[prefix][section] = true
+			}
 		}
 	}
-	return nil
+	best := ""
+	found := false
+	for prefix, sections := range seen {
+		complete := true
+		for _, section := range sectionDirs {
+			if !sections[section] {
+				complete = false
+				break
+			}
+		}
+		if complete && (!found || len(prefix) < len(best)) {
+			best, found = prefix, true
+		}
+	}
+	if !found {
+		return "", fmt.Errorf("zip does not contain a directory holding all of: %s", strings.Join(sectionDirs, ", "))
+	}
+	return best, nil
+}
+
+// underSection reports whether a prefix-stripped, slash-separated path lies inside one of the
+// wanted section subtrees.
+func underSection(rel string) bool {
+	for _, section := range sectionDirs {
+		if strings.HasPrefix(rel, section+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func writeZipEntry(f *zip.File, target string) error {
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return err
+	}
 	rc, err := f.Open()
 	if err != nil {
 		return err
@@ -214,74 +341,6 @@ func writeZipEntry(f *zip.File, target string) error {
 		return err
 	}
 	if _, err := io.Copy(out, rc); err != nil {
-		out.Close()
-		return err
-	}
-	return out.Close()
-}
-
-// findDocRoot returns the first directory under root that contains both Manual and
-// ScriptReference subdirectories - the documentation root the corpus builder expects.
-func findDocRoot(root string) (string, error) {
-	var found string
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !d.IsDir() {
-			return nil
-		}
-		if hasDir(filepath.Join(path, "Manual")) && hasDir(filepath.Join(path, "ScriptReference")) {
-			found = path
-			return filepath.SkipAll
-		}
-		return nil
-	})
-	if err != nil {
-		return "", err
-	}
-	if found == "" {
-		return "", fmt.Errorf("could not find extracted documentation root containing Manual and ScriptReference under %s", root)
-	}
-	return found, nil
-}
-
-func hasDir(p string) bool {
-	info, err := os.Stat(p)
-	return err == nil && info.IsDir()
-}
-
-func copyTree(src, dst string) error {
-	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, rel)
-		if d.IsDir() {
-			return os.MkdirAll(target, 0o755)
-		}
-		return copyFile(path, target)
-	})
-}
-
-func copyFile(src, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, in); err != nil {
 		out.Close()
 		return err
 	}

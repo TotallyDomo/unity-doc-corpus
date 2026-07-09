@@ -24,8 +24,9 @@ Run all commands from the repository root. Invocations are written suffix-less
    cd ..
    ```
 
-   Append `.exe` to the `-o` names on Windows, or use the wrapper:
-   `powershell -ExecutionPolicy Bypass -File scripts/build.ps1`
+   On Windows, `go build` does not add `.exe` to an explicit `-o` name, so a binary built
+   as above will not run: run `scripts\build.ps1` from PowerShell instead (it writes the two
+   `.exe` binaries), or append `.exe` to both `-o` names above.
 
 2. Fetch the offline docs for the requested Unity version stream (a several-hundred-MB
    download from Unity's official hosts; ~475 MB for 6000.3):
@@ -34,11 +35,13 @@ Run all commands from the repository root. Invocations are written suffix-less
    bin/unity-doc-corpus fetch --version 6000.3
    ```
 
-   `--destination` defaults to `unity-docs`; `--resolve-only` prints the resolved zip URL
-   without downloading; `--force` replaces an existing destination directory (the downloaded
-   zip is still reused from the cache); the download cache defaults to
-   `<os-temp>/unity-doc-downloads` - point `--cache-root` elsewhere or delete it to force a
-   re-download.
+   Only the `Manual` and `ScriptReference` subtrees are extracted (in parallel, straight to
+   the destination - the rest of the zip is not read by `build`). `--workers` sets the
+   extraction worker count (default: logical CPUs). After a successful extraction the
+   downloaded zip is deleted to reclaim space (~475 MB); pass `--keep-zip` to cache it for a
+   later re-fetch. `--destination` defaults to `unity-docs`; `--resolve-only` prints the
+   resolved zip URL without downloading; `--force` replaces an existing destination directory;
+   the download cache defaults to `<os-temp>/unity-doc-downloads` (`--cache-root` moves it).
 
 3. Build or refresh the derived corpus:
 
@@ -49,7 +52,8 @@ Run all commands from the repository root. Invocations are written suffix-less
    `--workers` defaults to half the logical CPUs; lower it to keep the machine responsive.
 
 4. Sanity-check the output: `unity-docs/_agent/manifest.json` reports page count and byte
-   ratios; `unity-docs/_agent/index.md` describes the corpus layout and lookup order.
+   ratios; `unity-docs/_agent/index.md` describes the corpus layout and lookup order. Quick
+   lookup smoke test: `bin/unity-doc-corpus search --corpus unity-docs/_agent "physics"`.
 
 The builder never modifies the original HTML: it writes a derived `_agent` directory beside
 it and records a SHA-256 per source page. Keep the originals intact - the lookup skill's

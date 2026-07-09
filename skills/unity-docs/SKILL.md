@@ -26,13 +26,19 @@ empty, say the corpus does not cover it rather than concluding the API does not 
 2. Exact API, class, or page names: search `search_index.tsv`. It is a plain TSV with header
    `page_key  section  page_id  title  source_rel  md_rel  canonical_url` - grep the title or
    page_id column, e.g. `grep -i "AsyncOperation" search_index.tsv | head`.
-3. Concept or free-text queries: FTS5 over `docs.sqlite`:
+3. Concept or free-text queries: FTS5 over `docs.sqlite`. If the `unity-doc-corpus` builder
+   binary is on hand (you built the repo), it runs the query with no other tooling:
 
    ```
-   sqlite3 docs.sqlite "SELECT p.title, p.md_rel FROM pages_fts f JOIN pages p ON p.page_key = f.page_key WHERE pages_fts MATCH 'addressables memory' ORDER BY bm25(pages_fts) LIMIT 10;"
+   unity-doc-corpus search --corpus <corpus-root> "addressables memory"
    ```
 
-   Any local SQLite client works (Python's built-in `sqlite3` module if the CLI is missing).
+   Otherwise query `docs.sqlite` directly with any local SQLite client - the `sqlite3` CLI,
+   or Python's built-in `sqlite3` module if the CLI is missing:
+
+   ```
+   sqlite3 <corpus-root>/docs.sqlite "SELECT p.title, p.md_rel FROM pages_fts f JOIN pages p ON p.page_key = f.page_key WHERE pages_fts MATCH 'addressables memory' ORDER BY bm25(pages_fts) LIMIT 10;"
+   ```
 4. Open the matching stripped Markdown page under `text/Manual/...` or
    `text/ScriptReference/...` (the `md_rel` column points at it).
 5. For load-bearing conclusions, verify against the original HTML: each Markdown page's
@@ -47,5 +53,6 @@ page from what was inferred across pages.
 ## Trust surface
 
 - Network: none. All lookups are local file reads and local SQLite queries.
-- Executes: nothing beyond your local grep/SQLite tooling.
+- Executes: nothing required beyond your local grep/SQLite tooling; optionally the local
+  `unity-doc-corpus search` binary if you use it.
 - Data egress: none.

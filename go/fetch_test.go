@@ -31,70 +31,118 @@ func writeTestZip(t *testing.T, path string, entries map[string]string) {
 	}
 }
 
-// unzip -> findDocRoot -> copyTree is the fetch extraction contract: the zip expands intact, the
-// documentation root (the dir holding both Manual and ScriptReference) is located even when
-// nested under a top-level folder, and copyTree reproduces the tree faithfully.
-func TestUnzipFindDocRootCopyTree(t *testing.T) {
+// extractSections is the fetch extraction contract: only Manual and ScriptReference (with their
+// nested docdata) are pulled from the zip, the doc-root prefix is stripped so they land at the
+// top of dest, and unused siblings (uploads/static assets) are left behind.
+func TestExtractSectionsSelective(t *testing.T) {
 	tmp := t.TempDir()
 	zipPath := filepath.Join(tmp, "docs.zip")
 	writeTestZip(t, zipPath, map[string]string{
-		"UnityDocs/Documentation/en/Manual/Intro.html":        "<html>manual</html>",
-		"UnityDocs/Documentation/en/ScriptReference/Foo.html": "<html>ref</html>",
-		"UnityDocs/Documentation/en/uploads/asset.bin":        "binary",
+		"UnityDocs/Documentation/en/Manual/Intro.html":            "<html>manual</html>",
+		"UnityDocs/Documentation/en/Manual/docdata/index.json":    `{"pages":[["Intro","Introduction"]]}`,
+		"UnityDocs/Documentation/en/ScriptReference/Foo.html":     "<html>ref</html>",
+		"UnityDocs/Documentation/en/uploads/asset.bin":            "binary",
+		"UnityDocs/Documentation/en/StaticFiles/style.css":        "body{}",
 	})
 
-	extract := filepath.Join(tmp, "extract")
-	if err := unzip(zipPath, extract); err != nil {
-		t.Fatalf("unzip: %v", err)
-	}
-
-	docRoot, err := findDocRoot(extract)
-	if err != nil {
-		t.Fatalf("findDocRoot: %v", err)
-	}
-	if filepath.Base(docRoot) != "en" {
-		t.Errorf("docRoot = %q, want the nested .../en directory", docRoot)
-	}
-
 	dest := filepath.Join(tmp, "dest")
-	if err := copyTree(docRoot, dest); err != nil {
-		t.Fatalf("copyTree: %v", err)
+	if err := extractSections(zipPath, dest, 4); err != nil {
+		t.Fatalf("extractSections: %v", err)
 	}
-	for _, rel := range []string{"Manual/Intro.html", "ScriptReference/Foo.html", "uploads/asset.bin"} {
+
+	// Wanted subtrees are present, prefix-stripped; nested docdata (titles source) survives.
+	for _, rel := range []string{"Manual/Intro.html", "Manual/docdata/index.json", "ScriptReference/Foo.html"} {
 		if _, err := os.Stat(filepath.Join(dest, filepath.FromSlash(rel))); err != nil {
-			t.Errorf("copied tree missing %s: %v", rel, err)
+			t.Errorf("expected %s to be extracted: %v", rel, err)
 		}
 	}
 	got, err := os.ReadFile(filepath.Join(dest, "Manual", "Intro.html"))
 	if err != nil || string(got) != "<html>manual</html>" {
-		t.Errorf("copied content mismatch: %q, %v", got, err)
+		t.Errorf("extracted content mismatch: %q, %v", got, err)
+	}
+	// Unused siblings are skipped entirely.
+	for _, rel := range []string{"uploads/asset.bin", "StaticFiles/style.css"} {
+		if _, err := os.Stat(filepath.Join(dest, filepath.FromSlash(rel))); !os.IsNotExist(err) {
+			t.Errorf("expected %s to be skipped, but it exists (err=%v)", rel, err)
+		}
 	}
 }
 
-// unzip must reject zip-slip entries that resolve outside the destination rather than writing
-// through the traversal - the guard that stops a hostile archive from escaping the extract dir.
-func TestUnzipRejectsZipSlip(t *testing.T) {
+// A zip-root layout (Manual/ and ScriptReference/ at the top) yields an empty prefix and still
+// extracts correctly. Single worker exercises the serial path.
+func TestExtractSectionsRootLayout(t *testing.T) {
+	tmp := t.TempDir()
+	zipPath := filepath.Join(tmp, "docs.zip")
+	writeTestZip(t, zipPath, map[string]string{
+		"Manual/A.html":          "a",
+		"ScriptReference/B.html": "b",
+		"uploads/c.bin":          "c",
+	})
+	dest := filepath.Join(tmp, "dest")
+	if err := extractSections(zipPath, dest, 1); err != nil {
+		t.Fatalf("extractSections: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "Manual", "A.html")); err != nil {
+		t.Errorf("Manual/A.html missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "uploads", "c.bin")); !os.IsNotExist(err) {
+		t.Errorf("uploads should be skipped")
+	}
+}
+
+// extractSections must reject zip-slip entries that resolve outside the destination rather than
+// writing through the traversal.
+func TestExtractSectionsRejectsZipSlip(t *testing.T) {
 	tmp := t.TempDir()
 	zipPath := filepath.Join(tmp, "evil.zip")
 	writeTestZip(t, zipPath, map[string]string{
-		"../escape.txt": "pwned",
+		"Manual/ok.html":          "ok",
+		"ScriptReference/ok.html": "ok",
+		"Manual/../../escape.txt": "pwned",
 	})
-	extract := filepath.Join(tmp, "extract")
-	if err := unzip(zipPath, extract); err == nil {
-		t.Fatal("expected unzip to reject a path-traversal entry")
+	dest := filepath.Join(tmp, "dest")
+	if err := extractSections(zipPath, dest, 2); err == nil {
+		t.Fatal("expected extractSections to reject a path-traversal entry")
 	}
 	if _, err := os.Stat(filepath.Join(tmp, "escape.txt")); err == nil {
 		t.Fatal("zip-slip guard failed: file written outside destination")
 	}
 }
 
-// findDocRoot fails clearly when no Manual+ScriptReference pair exists anywhere in the tree.
-func TestFindDocRootMissing(t *testing.T) {
+// findSectionPrefix / extractSections fail clearly when the zip lacks a directory holding both
+// Manual and ScriptReference.
+func TestExtractSectionsMissingSection(t *testing.T) {
 	tmp := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(tmp, "Manual"), 0o755); err != nil {
+	zipPath := filepath.Join(tmp, "docs.zip")
+	writeTestZip(t, zipPath, map[string]string{
+		"UnityDocs/en/Manual/Intro.html": "<html>manual</html>",
+	})
+	dest := filepath.Join(tmp, "dest")
+	if err := extractSections(zipPath, dest, 2); err == nil {
+		t.Fatal("expected error when ScriptReference is absent")
+	}
+}
+
+// findSectionPrefix picks the shortest prefix that holds all sections, even when the section
+// names also appear deeper in the tree.
+func TestFindSectionPrefix(t *testing.T) {
+	tmp := t.TempDir()
+	zipPath := filepath.Join(tmp, "docs.zip")
+	writeTestZip(t, zipPath, map[string]string{
+		"root/Manual/Intro.html":                     "m",
+		"root/ScriptReference/Foo.html":              "s",
+		"root/Manual/ScriptReference/nested/x.html":  "nested-noise",
+	})
+	zr, err := zip.OpenReader(zipPath)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := findDocRoot(tmp); err == nil {
-		t.Fatal("expected error when ScriptReference is absent")
+	defer zr.Close()
+	prefix, err := findSectionPrefix(zr.File)
+	if err != nil {
+		t.Fatalf("findSectionPrefix: %v", err)
+	}
+	if prefix != "root/" {
+		t.Errorf("prefix = %q, want %q", prefix, "root/")
 	}
 }

@@ -244,7 +244,7 @@ func build(source, output string, workers int) error {
 		"sqlite_fts5":             fts5,
 		"worker_count":            workers,
 		"files":                   map[string]string{"pages_jsonl": "pages.jsonl", "search_index_tsv": "search_index.tsv", "sqlite": "docs.sqlite", "text_root": "text"},
-		"no_data_loss_note":       "Original HTML, static assets, docdata, and uploads are left intact. Derived Markdown strips page chrome for agent lookup and records source paths plus SHA-256 hashes for every transformed HTML page.",
+		"no_data_loss_note":       "Original Manual and ScriptReference HTML (and their docdata) are left intact. Derived Markdown strips page chrome for agent lookup and records source paths plus SHA-256 hashes for every transformed HTML page.",
 	}
 	if err := timer.measure("write_index", func() error {
 		return os.WriteFile(filepath.Join(outputAbs, "index.md"), []byte(indexMarkdown(pageCount, totalSourceBytes, totalTextBytes, fts5)), 0644)

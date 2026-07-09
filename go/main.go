@@ -10,8 +10,9 @@ import (
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage:")
-	fmt.Fprintln(os.Stderr, "  unity-doc-corpus fetch --version <ver> [--destination <dir>] [--cache-root <dir>] [--force] [--resolve-only]")
-	fmt.Fprintln(os.Stderr, "  unity-doc-corpus build --source <docs-root> --output <agent-output> [--workers N]")
+	fmt.Fprintln(os.Stderr, "  unity-doc-corpus fetch  --version <ver> [--destination <dir>] [--cache-root <dir>] [--workers N] [--force] [--resolve-only]")
+	fmt.Fprintln(os.Stderr, "  unity-doc-corpus build  --source <docs-root> --output <agent-output> [--workers N]")
+	fmt.Fprintln(os.Stderr, "  unity-doc-corpus search [--corpus <agent-output>] [--limit N] <query>")
 }
 
 func main() {
@@ -24,6 +25,8 @@ func main() {
 		runBuild(os.Args[2:])
 	case "fetch":
 		runFetch(os.Args[2:])
+	case "search":
+		runSearch(os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 	default:
