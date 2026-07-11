@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -292,15 +293,57 @@ func TestHTTPClientRefusesOffHostRedirect(t *testing.T) {
 		resp.Body.Close()
 		t.Fatal("redirect to an unpinned host must be refused")
 	}
-	if !strings.Contains(err.Error(), "unpinned host") {
+	if !strings.Contains(err.Error(), "refused") {
 		t.Errorf("unexpected refusal error: %v", err)
 	}
 
-	for _, host := range []string{"docs.unity3d.com", "cloudmedia-docs.unity3d.com", "storage.googleapis.com"} {
-		req, _ := http.NewRequest("GET", "https://"+host+"/x", nil)
+	for _, url := range []string{
+		"https://docs.unity3d.com/x",
+		"https://cloudmedia-docs.unity3d.com/x",
+		"https://storage.googleapis.com/docscloudstorage/en/2019.4/UnityDocumentation.zip",
+	} {
+		req, _ := http.NewRequest("GET", url, nil)
 		if err := httpClient.CheckRedirect(req, nil); err != nil {
-			t.Errorf("pinned host %s wrongly refused: %v", host, err)
+			t.Errorf("pinned URL %s wrongly refused: %v", url, err)
 		}
+	}
+
+	// Tightened pinning (blind-E2E findings item 9): a pinned HOST is not enough - a hop must
+	// stay on https, and on the shared GCS host it must stay inside the docscloudstorage
+	// bucket. TLS is the only integrity control on the download, and storage.googleapis.com
+	// serves arbitrary tenants' buckets.
+	for _, url := range []string{
+		"http://docs.unity3d.com/x",                        // scheme downgrade
+		"https://storage.googleapis.com/evil-bucket/x.zip", // foreign GCS bucket
+		"https://storage.googleapis.com/x.zip",             // bucketless GCS path
+	} {
+		req, _ := http.NewRequest("GET", url, nil)
+		if err := httpClient.CheckRedirect(req, nil); err == nil {
+			t.Errorf("hop to %s must be refused", url)
+		}
+	}
+}
+
+// The source verb must not misdiagnose a misspelled page as missing docs: with the extracted
+// tree present and no retained zip, the error names the page and points at the spelling.
+func TestWriteSourceHTMLDistinguishesMissingPageFromMissingDocs(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "Manual"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := writeSourceHTML(root, "Manual/NoSuchPage.html", io.Discard)
+	if err == nil {
+		t.Fatal("missing page must error")
+	}
+	if !strings.Contains(err.Error(), "source_rel spelling") {
+		t.Errorf("want the misspelling diagnosis, got: %v", err)
+	}
+
+	// With no extracted tree AND no zip, the original re-run-fetch diagnosis still applies.
+	empty := t.TempDir()
+	_, err = writeSourceHTML(empty, "Manual/NoSuchPage.html", io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "re-run fetch") {
+		t.Errorf("want the missing-docs diagnosis, got: %v", err)
 	}
 }
 

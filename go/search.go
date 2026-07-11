@@ -86,15 +86,18 @@ FROM pages_fts f JOIN pages p ON p.page_key = f.page_key
 WHERE pages_fts MATCH ?
 ORDER BY bm25(pages_fts, 0.0, 10.0, 1.0) LIMIT ?`
 	rows, err := db.Query(q, query, limit)
-	if err != nil && strings.Contains(err.Error(), "syntax error") {
-		// Raw FTS5 syntax choked (dots in API names, stray operators). Retry with the query
-		// reduced to plain alphanumeric terms instead of surfacing an FTS5 parse error.
-		if sanitized := ftsSanitize(query); sanitized != "" && sanitized != query {
-			rows, err = db.Query(q, sanitized, limit)
+	if err != nil {
+		// Raw FTS5 parsing choked (dots in API names, stray operators, unbalanced quotes,
+		// bareword AND/OR/NOT). Retry once with the query reduced to plain alphanumeric terms,
+		// each double-quoted so FTS5 reads them as literals rather than operators. Any first
+		// query error takes this path: with a valid database the only failures here are query
+		// parse errors, and one extra retry against a genuinely broken database is harmless.
+		if quoted := ftsQuoteTerms(ftsSanitize(query)); quoted != "" {
+			rows, err = db.Query(q, quoted, limit)
 		}
 	}
 	if err != nil {
-		return nil, fmt.Errorf("FTS query failed (was the corpus built with FTS5 support? check manifest.json sqlite_fts5): %w", err)
+		return nil, fmt.Errorf("FTS query failed even after sanitizing (was the corpus built with FTS5 support? check manifest.json sqlite_fts5): %w", err)
 	}
 	defer rows.Close()
 	var hits []searchHit
@@ -127,5 +130,19 @@ func ftsSanitize(query string) string {
 		}
 	}
 	flush()
+	return strings.Join(terms, " ")
+}
+
+// ftsQuoteTerms wraps each space-separated term in FTS5 string quotes, so sanitized barewords
+// that collide with FTS5 operators (AND, OR, NOT, NEAR) match as literal terms instead of
+// erroring. Input comes from ftsSanitize, so the terms are plain alphanumerics.
+func ftsQuoteTerms(sanitized string) string {
+	if sanitized == "" {
+		return ""
+	}
+	terms := strings.Fields(sanitized)
+	for i, t := range terms {
+		terms[i] = `"` + t + `"`
+	}
 	return strings.Join(terms, " ")
 }

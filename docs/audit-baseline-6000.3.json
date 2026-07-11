@@ -1,501 +1,2982 @@
 {
-  "description": "Accepted content-loss flags for the unity-doc-corpus audit (known false-positive classes, triaged per the M0042 spec). audit --baseline exits zero iff every content-loss flag's page_key is listed here; regenerate with --write-baseline only after a human triages the change.",
-  "page_keys": [
-    "ScriptReference/AI.NavMeshObstacleShape.Box",
-    "ScriptReference/AI.NavMeshObstacleShape.Capsule",
-    "ScriptReference/AI.ObstacleAvoidanceType.NoObstacleAvoidance",
-    "ScriptReference/AI.OffMeshLinkType.LinkTypeDropDown",
-    "ScriptReference/AI.OffMeshLinkType.LinkTypeJumpAcross",
-    "ScriptReference/AdaptivePerformance.Provider.Feature.ClusterInfo",
-    "ScriptReference/AdaptivePerformance.Provider.Feature.CpuFrameTime",
-    "ScriptReference/AdaptivePerformance.Provider.Feature.GpuFrameTime",
-    "ScriptReference/AdaptivePerformance.Provider.Feature.None",
-    "ScriptReference/AdaptivePerformance.Provider.Feature.OverallFrameTime",
-    "ScriptReference/AdaptivePerformance.Provider.Feature.PerformanceMode",
-    "ScriptReference/AdaptivePerformance.Provider.Feature.TemperatureTrend",
-    "ScriptReference/AdaptivePerformance.Provider.Feature.WarningLevel",
-    "ScriptReference/AdaptivePerformance.Simulator.Editor.SimulatorAdaptivePerformanceSubsystem.SimulatorProvider",
-    "ScriptReference/AndroidArchitecture.None",
-    "ScriptReference/AndroidShowActivityIndicatorOnLoading.InversedLarge",
-    "ScriptReference/AndroidShowActivityIndicatorOnLoading.InversedSmall",
-    "ScriptReference/AndroidShowActivityIndicatorOnLoading.Small",
-    "ScriptReference/AndroidSplashScreenScale.ScaleToFit",
-    "ScriptReference/AndroidTargetDevice-x86",
-    "ScriptReference/AndroidTargetDevice.ARM64",
-    "ScriptReference/AndroidTargetDevice.ARMv7",
-    "ScriptReference/AnimationWindow",
-    "ScriptReference/Animations.AnimationScriptPlayable",
-    "ScriptReference/AnimatorControllerParameterType.Bool",
-    "ScriptReference/AnimatorControllerParameterType.Float",
-    "ScriptReference/AnimatorControllerParameterType.Int",
-    "ScriptReference/ApiCompatibilityLevel.NET_2_0",
-    "ScriptReference/AppleMobileArchitectureSimulator.Universal",
-    "ScriptReference/AssetImporters.ImportLogFlags.None",
-    "ScriptReference/Audio.ControlContext",
-    "ScriptReference/Audio.GeneratorInstance.IControl_1",
-    "ScriptReference/Audio.GeneratorInstance.IRealtime",
-    "ScriptReference/Audio.IAudioGenerator",
-    "ScriptReference/Audio.ProcessorInstance.UpdatedDataContext",
-    "ScriptReference/Audio.RealtimeContext",
-    "ScriptReference/Audio.RootOutputInstance.IControl_1",
-    "ScriptReference/Audio.RootOutputInstance.IRealtime",
-    "ScriptReference/AudioClip",
-    "ScriptReference/AudioCompressionFormat.AAC",
-    "ScriptReference/AudioReverbPreset.Alley",
-    "ScriptReference/AudioReverbPreset.Arena",
-    "ScriptReference/AudioReverbPreset.Auditorium",
-    "ScriptReference/AudioReverbPreset.Bathroom",
-    "ScriptReference/AudioReverbPreset.CarpetedHallway",
-    "ScriptReference/AudioReverbPreset.Cave",
-    "ScriptReference/AudioReverbPreset.City",
-    "ScriptReference/AudioReverbPreset.Concerthall",
-    "ScriptReference/AudioReverbPreset.Dizzy",
-    "ScriptReference/AudioReverbPreset.Drugged",
-    "ScriptReference/AudioReverbPreset.Forest",
-    "ScriptReference/AudioReverbPreset.Hallway",
-    "ScriptReference/AudioReverbPreset.Hangar",
-    "ScriptReference/AudioReverbPreset.Livingroom",
-    "ScriptReference/AudioReverbPreset.Mountains",
-    "ScriptReference/AudioReverbPreset.PaddedCell",
-    "ScriptReference/AudioReverbPreset.ParkingLot",
-    "ScriptReference/AudioReverbPreset.Plain",
-    "ScriptReference/AudioReverbPreset.Psychotic",
-    "ScriptReference/AudioReverbPreset.Quarry",
-    "ScriptReference/AudioReverbPreset.Room",
-    "ScriptReference/AudioReverbPreset.SewerPipe",
-    "ScriptReference/AudioReverbPreset.StoneCorridor",
-    "ScriptReference/AudioReverbPreset.Stoneroom",
-    "ScriptReference/AudioReverbPreset.Underwater",
-    "ScriptReference/AvatarMaskBodyPart.LeftFootIK",
-    "ScriptReference/AvatarMaskBodyPart.LeftHandIK",
-    "ScriptReference/AvatarMaskBodyPart.RightFootIK",
-    "ScriptReference/AvatarMaskBodyPart.RightHandIK",
-    "ScriptReference/Build.DefaultLaunchReport",
-    "ScriptReference/Build.OSArchitecture-x64ARM64",
-    "ScriptReference/Build.OSArchitecture-x86",
-    "ScriptReference/BuildTargetGroup.CloudRendering",
-    "ScriptReference/BuildTargetGroup.LinuxHeadlessSimulation",
-    "ScriptReference/BuildTargetGroup.Switch",
-    "ScriptReference/BuildTargetGroup.Unknown",
-    "ScriptReference/BuildTargetGroup.VisionOS",
-    "ScriptReference/BuildTargetGroup.iOS",
-    "ScriptReference/CanvasGroup",
-    "ScriptReference/ColorPrimaries.P3",
-    "ScriptReference/Compilation.AssemblyBuilderFlags.None",
-    "ScriptReference/Compilation.AssemblyFlags.None",
-    "ScriptReference/Compilation.CompilerMessageType.Info",
-    "ScriptReference/Connect.CoppaDrawer",
-    "ScriptReference/Connect.ProjectBindDrawer",
-    "ScriptReference/D3D12DeviceFilterLists-ctor",
-    "ScriptReference/DefaultLightingExplorerExtension",
-    "ScriptReference/DrawCameraMode.LitClustering",
-    "ScriptReference/Experimental.GraphView.Blackboard",
-    "ScriptReference/Experimental.GraphView.GraphElement",
-    "ScriptReference/Experimental.GraphView.GraphView",
-    "ScriptReference/Experimental.GraphView.Group",
-    "ScriptReference/Experimental.GraphView.Node",
-    "ScriptReference/Experimental.GraphView.SelectionDropper-prevDropTarget",
-    "ScriptReference/Experimental.GraphView.StackNode",
-    "ScriptReference/Experimental.GraphView.StickyNote",
-    "ScriptReference/Experimental.GraphView.StickyNoteFontSize.Huge",
-    "ScriptReference/Experimental.GraphView.StickyNoteFontSize.Small",
-    "ScriptReference/Experimental.GraphView.StickyNoteTheme.Black",
-    "ScriptReference/Experimental.Rendering.ScriptableBakedReflectionSystem",
-    "ScriptReference/Experimental.Rendering.ScriptableRuntimeReflectionSystem",
-    "ScriptReference/GridBrushBase.RotationDirection.Clockwise",
-    "ScriptReference/ILogger",
-    "ScriptReference/IMECompositionMode.Off",
-    "ScriptReference/IMECompositionMode.On",
-    "ScriptReference/IntegratedSubsystem",
-    "ScriptReference/IntegratedSubsystemDescriptor",
-    "ScriptReference/IntegrityCheckLevel.Medium",
-    "ScriptReference/KeyCode.B",
-    "ScriptReference/KeyCode.BackQuote",
-    "ScriptReference/KeyCode.Backslash",
-    "ScriptReference/KeyCode.Backspace",
-    "ScriptReference/KeyCode.CapsLock",
-    "ScriptReference/KeyCode.Clear",
-    "ScriptReference/KeyCode.Comma",
-    "ScriptReference/KeyCode.D",
-    "ScriptReference/KeyCode.DownArrow",
-    "ScriptReference/KeyCode.E",
-    "ScriptReference/KeyCode.End",
-    "ScriptReference/KeyCode.Equals",
-    "ScriptReference/KeyCode.Escape",
-    "ScriptReference/KeyCode.F",
-    "ScriptReference/KeyCode.F1",
-    "ScriptReference/KeyCode.F10",
-    "ScriptReference/KeyCode.F11",
-    "ScriptReference/KeyCode.F12",
-    "ScriptReference/KeyCode.F13",
-    "ScriptReference/KeyCode.F14",
-    "ScriptReference/KeyCode.F15",
-    "ScriptReference/KeyCode.F16",
-    "ScriptReference/KeyCode.F17",
-    "ScriptReference/KeyCode.F18",
-    "ScriptReference/KeyCode.F19",
-    "ScriptReference/KeyCode.F2",
-    "ScriptReference/KeyCode.F20",
-    "ScriptReference/KeyCode.F21",
-    "ScriptReference/KeyCode.F22",
-    "ScriptReference/KeyCode.F23",
-    "ScriptReference/KeyCode.F24",
-    "ScriptReference/KeyCode.F3",
-    "ScriptReference/KeyCode.F4",
-    "ScriptReference/KeyCode.F5",
-    "ScriptReference/KeyCode.F6",
-    "ScriptReference/KeyCode.F7",
-    "ScriptReference/KeyCode.F8",
-    "ScriptReference/KeyCode.F9",
-    "ScriptReference/KeyCode.G",
-    "ScriptReference/KeyCode.H",
-    "ScriptReference/KeyCode.Home",
-    "ScriptReference/KeyCode.I",
-    "ScriptReference/KeyCode.Insert",
-    "ScriptReference/KeyCode.J",
-    "ScriptReference/KeyCode.K",
-    "ScriptReference/KeyCode.L",
-    "ScriptReference/KeyCode.LeftAlt",
-    "ScriptReference/KeyCode.LeftApple",
-    "ScriptReference/KeyCode.LeftArrow",
-    "ScriptReference/KeyCode.LeftCommand",
-    "ScriptReference/KeyCode.LeftControl",
-    "ScriptReference/KeyCode.LeftShift",
-    "ScriptReference/KeyCode.M",
-    "ScriptReference/KeyCode.Menu",
-    "ScriptReference/KeyCode.Minus",
-    "ScriptReference/KeyCode.N",
-    "ScriptReference/KeyCode.Numlock",
-    "ScriptReference/KeyCode.O",
-    "ScriptReference/KeyCode.P",
-    "ScriptReference/KeyCode.PageDown",
-    "ScriptReference/KeyCode.PageUp",
-    "ScriptReference/KeyCode.Period",
-    "ScriptReference/KeyCode.Print",
-    "ScriptReference/KeyCode.Q",
-    "ScriptReference/KeyCode.Quote",
-    "ScriptReference/KeyCode.R",
-    "ScriptReference/KeyCode.RightAlt",
-    "ScriptReference/KeyCode.RightApple",
-    "ScriptReference/KeyCode.RightArrow",
-    "ScriptReference/KeyCode.RightCommand",
-    "ScriptReference/KeyCode.RightControl",
-    "ScriptReference/KeyCode.RightShift",
-    "ScriptReference/KeyCode.S",
-    "ScriptReference/KeyCode.ScrollLock",
-    "ScriptReference/KeyCode.Semicolon",
-    "ScriptReference/KeyCode.Slash",
-    "ScriptReference/KeyCode.Space",
-    "ScriptReference/KeyCode.T",
-    "ScriptReference/KeyCode.Tab",
-    "ScriptReference/KeyCode.U",
-    "ScriptReference/KeyCode.V",
-    "ScriptReference/KeyCode.W",
-    "ScriptReference/KeyCode.WheelDown",
-    "ScriptReference/KeyCode.WheelUp",
-    "ScriptReference/LightTransport.PostProcessing.RadeonRaysProbePostProcessor",
-    "ScriptReference/LightTransport.PostProcessing.ReferenceProbePostProcessor",
-    "ScriptReference/LightTransport.ProbeBakeRequestOutput.Validity",
-    "ScriptReference/LightTransport.RadeonRaysContext",
-    "ScriptReference/LightTransport.RadeonRaysProbeIntegrator",
-    "ScriptReference/LightTransport.RadeonRaysWorld",
-    "ScriptReference/LightTransport.ReferenceContext",
-    "ScriptReference/LogOption.None",
-    "ScriptReference/Logger",
-    "ScriptReference/LowLevelPhysics.GeometryType.Box",
-    "ScriptReference/LowLevelPhysics.GeometryType.Sphere",
-    "ScriptReference/MPE.ProcessEvent.AfterDomainReload",
-    "ScriptReference/MaterialPropertyType.Int",
-    "ScriptReference/MaterialPropertyType.Matrix",
-    "ScriptReference/MaterialPropertyType.Vector",
-    "ScriptReference/MessageType.Info",
-    "ScriptReference/MessageType.None",
-    "ScriptReference/NPOTSupport.Full",
-    "ScriptReference/NVIDIA.DLSSFeatureFlags.None",
-    "ScriptReference/Networking.MultipartFormDataSection",
-    "ScriptReference/Networking.MultipartFormFileSection",
-    "ScriptReference/Networking.PlayerConnection.EditorConnection",
-    "ScriptReference/Networking.PlayerConnection.PlayerConnection",
-    "ScriptReference/Networking.UnityWebRequest.Result.Success",
-    "ScriptReference/ObjectMatchMode.ByName",
-    "ScriptReference/Overlays.ISupportsOverlaysWithFilter",
-    "ScriptReference/Overlays.ToolbarOverlay",
-    "ScriptReference/ParticleSystemCollisionQuality.Medium",
-    "ScriptReference/ParticleSystemShapeTextureChannel.Blue",
-    "ScriptReference/ParticleSystemShapeTextureChannel.Green",
-    "ScriptReference/ParticleSystemShapeTextureChannel.Red",
-    "ScriptReference/PenEventType.NoContact",
-    "ScriptReference/PhysicsVisualizationSettings.QueryFilter.None",
-    "ScriptReference/PlayModeWindow.PlayModeViewTypes.GameView",
-    "ScriptReference/Playables.Notification",
-    "ScriptReference/Playables.PlayableAsset",
-    "ScriptReference/Playables.PlayableBehaviour",
-    "ScriptReference/Playables.PlayableDirector",
-    "ScriptReference/Pool.LinkedPool_1",
-    "ScriptReference/Pool.ObjectPool_1",
-    "ScriptReference/ProfilerWindow",
-    "ScriptReference/Profiling.ProfilerArea.GlobalIllumination",
-    "ScriptReference/Profiling.ProfilerArea.NetworkMessages",
-    "ScriptReference/Profiling.ProfilerArea.NetworkOperations",
-    "ScriptReference/Profiling.ProfilerArea.Physics",
-    "ScriptReference/Profiling.ProfilerArea.Physics2D",
-    "ScriptReference/Profiling.ProfilerArea.Video",
-    "ScriptReference/Profiling.ProfilerArea.VirtualTexturing",
-    "ScriptReference/RectTransform.Axis.Horizontal",
-    "ScriptReference/RectTransform.Axis.Vertical",
-    "ScriptReference/RectTransform.Edge.Bottom",
-    "ScriptReference/RectTransform.Edge.Top",
-    "ScriptReference/Rendering.BatchCullingFlags.None",
-    "ScriptReference/Rendering.BatchID",
-    "ScriptReference/Rendering.BuiltinRenderTextureType.RenderTexture",
-    "ScriptReference/Rendering.CameraEvent.AfterImageEffects",
-    "ScriptReference/Rendering.CameraEvent.BeforeImageEffects",
-    "ScriptReference/Rendering.ColorWriteMask.Alpha",
-    "ScriptReference/Rendering.ColorWriteMask.Blue",
-    "ScriptReference/Rendering.ColorWriteMask.Green",
-    "ScriptReference/Rendering.ColorWriteMask.Red",
-    "ScriptReference/Rendering.FoveatedRenderingMode.Disabled",
-    "ScriptReference/Rendering.GraphicsDeviceType.Vulkan",
-    "ScriptReference/Rendering.GraphicsDeviceType.WebGPU",
-    "ScriptReference/Rendering.IRenderPipelineGraphicsSettingsContextMenu2_1",
-    "ScriptReference/Rendering.IRenderPipelineGraphicsSettingsContextMenu_1",
-    "ScriptReference/Rendering.IRenderPipelineResources",
-    "ScriptReference/Rendering.MachineLearningDataType.Unknown",
-    "ScriptReference/Rendering.MachineLearningOperatorType.Conv",
-    "ScriptReference/Rendering.MachineLearningOperatorType.Identity",
-    "ScriptReference/Rendering.MachineLearningOperatorType.None",
-    "ScriptReference/Rendering.MachineLearningOperatorType.ReduceMax",
-    "ScriptReference/Rendering.MachineLearningOperatorType.ReduceMean",
-    "ScriptReference/Rendering.MachineLearningOperatorType.ReduceMin",
-    "ScriptReference/Rendering.MachineLearningOperatorType.ReduceProd",
-    "ScriptReference/Rendering.PassType.ScriptableRenderPipeline",
-    "ScriptReference/Rendering.RenderingLayersLimitSettings",
-    "ScriptReference/Rendering.ShaderParamType.Bool",
-    "ScriptReference/Rendering.ShaderParamType.Short",
-    "ScriptReference/Rendering.ShaderParamType.UInt",
-    "ScriptReference/Rendering.ShaderRequirements.None",
-    "ScriptReference/Rendering.ShadingRateCombinerStage.Fragment",
-    "ScriptReference/Rendering.ShadingRateCombinerStage.Primitive",
-    "ScriptReference/Rendering.UVChannelFlags.UV1",
-    "ScriptReference/Rendering.UVChannelFlags.UV2",
-    "ScriptReference/Rendering.UVChannelFlags.UV3",
-    "ScriptReference/Rendering.VirtualTexturing.FilterMode.Bilinear",
-    "ScriptReference/Rendering.VirtualTexturing.FilterMode.Trilinear",
-    "ScriptReference/RenderingPath.VertexLit",
-    "ScriptReference/RotationDriveMode.Slerp",
-    "ScriptReference/SceneTemplate.SceneTemplatePipelineAdapter",
-    "ScriptReference/SceneView",
-    "ScriptReference/Search.IFilterNode",
-    "ScriptReference/Search.INestedQueryNode",
-    "ScriptReference/Search.ISearchNode",
-    "ScriptReference/Search.QueryNodeType.Aggregator",
-    "ScriptReference/Search.QueryNodeType.And",
-    "ScriptReference/Search.QueryNodeType.Comment",
-    "ScriptReference/Search.QueryNodeType.Filter",
-    "ScriptReference/Search.QueryNodeType.Group",
-    "ScriptReference/Search.QueryNodeType.Intersection",
-    "ScriptReference/Search.QueryNodeType.NestedQuery",
-    "ScriptReference/Search.QueryNodeType.Not",
-    "ScriptReference/Search.QueryNodeType.Or",
-    "ScriptReference/Search.QueryNodeType.Search",
-    "ScriptReference/Search.QueryNodeType.Toggle",
-    "ScriptReference/Search.QueryNodeType.Union",
-    "ScriptReference/Search.QueryNodeType.Where",
-    "ScriptReference/Search.SearchExpressionKeyword.None",
-    "ScriptReference/Search.SearchItemOptions.None",
-    "ScriptReference/SearchService.IObjectSelectorEngine",
-    "ScriptReference/SearchService.ObjectSelectorSearchContext",
-    "ScriptReference/SearchService.ProjectSearchContext",
-    "ScriptReference/SearchService.SceneSearchContext",
-    "ScriptReference/ShaderUtil.ShaderPropertyType.Color",
-    "ScriptReference/ShaderUtil.ShaderPropertyType.Float",
-    "ScriptReference/ShaderUtil.ShaderPropertyType.Int",
-    "ScriptReference/ShaderUtil.ShaderPropertyType.Range",
-    "ScriptReference/ShaderUtil.ShaderPropertyType.Vector",
-    "ScriptReference/ShortcutManagement.ShortcutModifiers.None",
-    "ScriptReference/ShortcutManagement.ShortcutModifiers.Shift",
-    "ScriptReference/SocialPlatforms.GameCenter.GameCenterPlatform",
-    "ScriptReference/SocialPlatforms.ILocalUser",
-    "ScriptReference/Subsystem",
-    "ScriptReference/SubsystemDescriptor",
-    "ScriptReference/SubsystemsImplementation.SubsystemDescriptorWithProvider",
-    "ScriptReference/SubsystemsImplementation.SubsystemWithProvider",
-    "ScriptReference/TerrainQualityOverrides.BasemapDistance",
-    "ScriptReference/TerrainQualityOverrides.BillboardStart",
-    "ScriptReference/TerrainQualityOverrides.DetailDensity",
-    "ScriptReference/TerrainQualityOverrides.DetailDistance",
-    "ScriptReference/TerrainQualityOverrides.FadeLength",
-    "ScriptReference/TerrainQualityOverrides.MaxTrees",
-    "ScriptReference/TerrainQualityOverrides.None",
-    "ScriptReference/TerrainQualityOverrides.PixelError",
-    "ScriptReference/TerrainQualityOverrides.TreeDistance",
-    "ScriptReference/TerrainRenderFlags.All",
-    "ScriptReference/TerrainRenderFlags.Details",
-    "ScriptReference/TerrainTools.OnInspectorGUIContext",
-    "ScriptReference/TerrainTools.TerrainToolShortcutContext",
-    "ScriptReference/TextureCompressionQuality.Best",
-    "ScriptReference/TextureCompressionQuality.Normal",
-    "ScriptReference/ThreadPriority.High",
-    "ScriptReference/ThreadPriority.Low",
-    "ScriptReference/Tilemaps.TileFlags.LockAll",
-    "ScriptReference/UIElements.AbstractProgressBar",
-    "ScriptReference/UIElements.Align.Auto",
-    "ScriptReference/UIElements.ArcDirection.Clockwise",
-    "ScriptReference/UIElements.BaseSlider_1",
-    "ScriptReference/UIElements.BindableElement",
-    "ScriptReference/UIElements.BindingLogLevel.None",
-    "ScriptReference/UIElements.CallbackEventHandler",
-    "ScriptReference/UIElements.CallbackOptions.Default",
-    "ScriptReference/UIElements.ChangeEvent_1",
-    "ScriptReference/UIElements.Column",
-    "ScriptReference/UIElements.ColumnSortingMode.None",
-    "ScriptReference/UIElements.Columns",
-    "ScriptReference/UIElements.CommandEventBase_1",
-    "ScriptReference/UIElements.DataBinding",
-    "ScriptReference/UIElements.DragAndDropEventBase_1",
-    "ScriptReference/UIElements.Experimental.ValueAnimation_1",
-    "ScriptReference/UIElements.FilterParameterType.Color",
-    "ScriptReference/UIElements.FlexDirection.Column",
-    "ScriptReference/UIElements.FlexDirection.ColumnReverse",
-    "ScriptReference/UIElements.FlexDirection.Row",
-    "ScriptReference/UIElements.FlexDirection.RowReverse",
-    "ScriptReference/UIElements.FocusEventBase_1",
-    "ScriptReference/UIElements.Foldout",
-    "ScriptReference/UIElements.HelpBoxMessageType.Info",
-    "ScriptReference/UIElements.HelpBoxMessageType.None",
-    "ScriptReference/UIElements.IRuntimePanel",
-    "ScriptReference/UIElements.ITextElementExperimentalFeatures",
-    "ScriptReference/UIElements.IUxmlFactory",
-    "ScriptReference/UIElements.KeyboardEventBase_1",
-    "ScriptReference/UIElements.Manipulator",
-    "ScriptReference/UIElements.MouseCaptureEventBase_1",
-    "ScriptReference/UIElements.MouseEventBase_1",
-    "ScriptReference/UIElements.NavigationEventBase_1",
-    "ScriptReference/UIElements.NavigationMoveEvent.Direction.None",
-    "ScriptReference/UIElements.PanelChangedEventBase_1",
-    "ScriptReference/UIElements.PenButton.PenEraser",
-    "ScriptReference/UIElements.Pivot.BottomLeft",
-    "ScriptReference/UIElements.Pivot.BottomRight",
-    "ScriptReference/UIElements.Pivot.TopLeft",
-    "ScriptReference/UIElements.Pivot.TopRight",
-    "ScriptReference/UIElements.PointerCaptureEventBase_1",
-    "ScriptReference/UIElements.PointerEventBase_1",
-    "ScriptReference/UIElements.PropertyField",
-    "ScriptReference/UIElements.SearchFieldBase_2",
-    "ScriptReference/UIElements.SelectionType.None",
-    "ScriptReference/UIElements.SortColumnDescription",
-    "ScriptReference/UIElements.SortDirection.Ascending",
-    "ScriptReference/UIElements.SortDirection.Descending",
-    "ScriptReference/UIElements.TextValueField_1",
-    "ScriptReference/UIElements.ToolbarMenu",
-    "ScriptReference/UIElements.ToolbarPopupSearchField",
-    "ScriptReference/UIElements.TransitionEventBase_1",
-    "ScriptReference/UIElements.UxmlFactory_2",
-    "ScriptReference/UIElements.VersionChangeType.Styles",
-    "ScriptReference/UIElements.VersionChangeType.ViewData",
-    "ScriptReference/UIElements.VisualElementFocusRing",
-    "ScriptReference/UIOrientation.AutoRotation",
-    "ScriptReference/UIOrientation.PortraitUpsideDown",
-    "ScriptReference/Unity.Android.Gradle.Manifest.Unit.In",
-    "ScriptReference/Unity.Android.Gradle.Manifest.Unit.Mm",
-    "ScriptReference/Unity.Android.Gradle.Manifest.Unit.Pt",
-    "ScriptReference/Unity.Android.Gradle.Manifest.Unit.Px",
-    "ScriptReference/Unity.Android.Gradle.RepositoriesMode.Null",
-    "ScriptReference/Unity.Collections.Allocator.None",
-    "ScriptReference/Unity.Hierarchy.HierarchyPropertyString",
-    "ScriptReference/Unity.Hierarchy.HierarchyPropertyUnmanaged_1",
-    "ScriptReference/Unity.Hierarchy.HierarchyTraversalDirection.Children",
-    "ScriptReference/Unity.Hierarchy.HierarchyTraversalDirection.Parents",
-    "ScriptReference/Unity.IO.Archive.ArchiveStatus.Complete",
-    "ScriptReference/Unity.IO.LowLevel.Unsafe.AsyncReadManagerMetrics.Flags.None",
-    "ScriptReference/Unity.IO.LowLevel.Unsafe.FileReadType.Async",
-    "ScriptReference/Unity.IO.LowLevel.Unsafe.FileReadType.Sync",
-    "ScriptReference/Unity.IO.LowLevel.Unsafe.Priority.PriorityHigh",
-    "ScriptReference/Unity.IO.LowLevel.Unsafe.Priority.PriorityLow",
-    "ScriptReference/Unity.Jobs.LowLevel.Unsafe.JobRanges.PhaseData",
-    "ScriptReference/Unity.Profiling.ProfilerCounterOptions.None",
-    "ScriptReference/Unity.Properties.ConcreteTypeVisitor",
-    "ScriptReference/Unity.Properties.ContainerPropertyBag_1",
-    "ScriptReference/Unity.Properties.IDictionaryElementProperty_1",
-    "ScriptReference/Unity.Properties.IPropertyBag_1",
-    "ScriptReference/Unity.Properties.ISetElementProperty_1",
-    "ScriptReference/Unity.Properties.KeyValuePairPropertyBag_2",
-    "ScriptReference/Unity.Properties.PathVisitor",
-    "ScriptReference/Unity.VectorGraphics.GradientFill",
-    "ScriptReference/Unity.VectorGraphics.GradientFillType.Linear",
-    "ScriptReference/Unity.VectorGraphics.PathCorner.Beveled",
-    "ScriptReference/Unity.VectorGraphics.PathCorner.Round",
-    "ScriptReference/Unity.VectorGraphics.PatternFill",
-    "ScriptReference/Unity.VectorGraphics.SolidFill",
-    "ScriptReference/Unity.VectorGraphics.TextureFill",
-    "ScriptReference/Unity.VectorGraphics.VectorUtils.Alignment.BottomLeft",
-    "ScriptReference/Unity.VectorGraphics.VectorUtils.Alignment.BottomRight",
-    "ScriptReference/Unity.VectorGraphics.VectorUtils.Alignment.TopLeft",
-    "ScriptReference/Unity.VectorGraphics.VectorUtils.Alignment.TopRight",
-    "ScriptReference/ValidationLevel.Medium",
-    "ScriptReference/VersionControl.FileMode.Binary",
-    "ScriptReference/VersionControl.FileMode.None",
-    "ScriptReference/VersionControl.ResolveMethod.UseMerged",
-    "ScriptReference/VersionControl.SubmitResult.ConflictingFiles",
-    "ScriptReference/VersionControl.SubmitResult.OK",
-    "ScriptReference/VideoSpatialQuality.HighSpatialQuality",
-    "ScriptReference/VulkanDeviceFilterLists-ctor",
-    "ScriptReference/Windows.Speech.ConfidenceLevel.High",
-    "ScriptReference/Windows.Speech.ConfidenceLevel.Low",
-    "ScriptReference/Windows.Speech.ConfidenceLevel.Medium",
-    "ScriptReference/Windows.Speech.ConfidenceLevel.Rejected",
-    "ScriptReference/Windows.Speech.SpeechError.NoError",
-    "ScriptReference/WindowsGamepadBackendHint.WindowsGamepadBackendHintWindowsGamingInput",
-    "ScriptReference/WindowsGamepadBackendHint.WindowsGamepadBackendHintXInput",
-    "ScriptReference/iOS.DeviceGeneration-iPad10Gen",
-    "ScriptReference/iOS.DeviceGeneration-iPad6Gen",
-    "ScriptReference/iOS.DeviceGeneration-iPad7Gen",
-    "ScriptReference/iOS.DeviceGeneration-iPad8Gen",
-    "ScriptReference/iOS.DeviceGeneration-iPad9Gen",
-    "ScriptReference/iOS.DeviceGeneration-iPadUnknown",
-    "ScriptReference/iOS.DeviceGeneration-iPhone11Pro",
-    "ScriptReference/iOS.DeviceGeneration-iPhone12Mini",
-    "ScriptReference/iOS.DeviceGeneration-iPhone12Pro",
-    "ScriptReference/iOS.DeviceGeneration-iPhone13",
-    "ScriptReference/iOS.DeviceGeneration-iPhone13Mini",
-    "ScriptReference/iOS.DeviceGeneration-iPhone13Pro",
-    "ScriptReference/iOS.DeviceGeneration-iPhone14",
-    "ScriptReference/iOS.DeviceGeneration-iPhone14Plus",
-    "ScriptReference/iOS.DeviceGeneration-iPhone14Pro",
-    "ScriptReference/iOS.DeviceGeneration-iPhone15Plus",
-    "ScriptReference/iOS.DeviceGeneration-iPhone15Pro",
-    "ScriptReference/iOS.DeviceGeneration-iPhone16",
-    "ScriptReference/iOS.DeviceGeneration-iPhone16Plus",
-    "ScriptReference/iOS.DeviceGeneration-iPhone16Pro",
-    "ScriptReference/iOS.DeviceGeneration-iPhone16e",
-    "ScriptReference/iOS.DeviceGeneration-iPhone17",
-    "ScriptReference/iOS.DeviceGeneration-iPhone17Pro",
-    "ScriptReference/iOS.DeviceGeneration-iPhone17e",
-    "ScriptReference/iOS.DeviceGeneration-iPhone5",
-    "ScriptReference/iOS.DeviceGeneration-iPhone5C",
-    "ScriptReference/iOS.DeviceGeneration-iPhone5S",
-    "ScriptReference/iOS.DeviceGeneration-iPhone6Plus",
-    "ScriptReference/iOS.DeviceGeneration-iPhone6S",
-    "ScriptReference/iOS.DeviceGeneration-iPhone6SPlus",
-    "ScriptReference/iOS.DeviceGeneration-iPhone7Plus",
-    "ScriptReference/iOS.DeviceGeneration-iPhone8Plus",
-    "ScriptReference/iOS.DeviceGeneration-iPhoneAir",
-    "ScriptReference/iOS.DeviceGeneration-iPhoneUnknown",
-    "ScriptReference/iOS.DeviceGeneration-iPhoneXR",
-    "ScriptReference/iOS.DeviceGeneration-iPhoneXS",
-    "ScriptReference/iOS.DeviceGeneration-iPhoneXSMax",
-    "ScriptReference/iOS.Xcode.XcScheme.FrameCaptureMode.Metal",
-    "ScriptReference/iOS.Xcode.XcScheme.MetalValidation.Extended",
-    "ScriptReference/iOSBackgroundMode.BackgroundFetch",
-    "ScriptReference/iOSBackgroundMode.ExternalAccessoryCommunication",
-    "ScriptReference/iOSBackgroundMode.LocationUpdates",
-    "ScriptReference/iOSBackgroundMode.NearbyInteraction",
-    "ScriptReference/iOSBackgroundMode.NetworkAuthentication",
-    "ScriptReference/iOSBackgroundMode.NewsstandDownloads",
-    "ScriptReference/iOSBackgroundMode.PushToTalk",
-    "ScriptReference/iOSBackgroundMode.RemoteNotifications",
-    "ScriptReference/iOSBackgroundMode.VoiceOverIP",
-    "ScriptReference/iOSTargetDevice-iPhoneOnly",
-    "ScriptReference/tvOS.DeviceGeneration.AppleTVHD"
+  "description": "Accepted content-loss flags for the unity-doc-corpus audit (known false-positive classes, triaged per the M0042 spec). audit --baseline exits zero iff every gating flag is covered by an entry AT OR BELOW its recorded magnitude and the corpus page count has not shrunk below page_count; a covered page that worsens re-gates. Regenerate with --write-baseline only after a human triages the change.",
+  "page_count": 39056,
+  "pages": [
+    {
+      "page_key": "ScriptReference/AI.NavMeshObstacleShape.Box",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/AI.NavMeshObstacleShape.Capsule",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/AI.ObstacleAvoidanceType.NoObstacleAvoidance",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/AI.OffMeshLinkType.LinkTypeDropDown",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/AI.OffMeshLinkType.LinkTypeJumpAcross",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/AdaptivePerformance.Provider.Feature.ClusterInfo",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 57
+    },
+    {
+      "page_key": "ScriptReference/AdaptivePerformance.Provider.Feature.CpuFrameTime",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 57
+    },
+    {
+      "page_key": "ScriptReference/AdaptivePerformance.Provider.Feature.GpuFrameTime",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 57
+    },
+    {
+      "page_key": "ScriptReference/AdaptivePerformance.Provider.Feature.None",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 49
+    },
+    {
+      "page_key": "ScriptReference/AdaptivePerformance.Provider.Feature.OverallFrameTime",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 57
+    },
+    {
+      "page_key": "ScriptReference/AdaptivePerformance.Provider.Feature.PerformanceMode",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 57
+    },
+    {
+      "page_key": "ScriptReference/AdaptivePerformance.Provider.Feature.TemperatureTrend",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 57
+    },
+    {
+      "page_key": "ScriptReference/AdaptivePerformance.Provider.Feature.WarningLevel",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 57
+    },
+    {
+      "page_key": "ScriptReference/AdaptivePerformance.Simulator.Editor.SimulatorAdaptivePerformanceSubsystem.SimulatorProvider",
+      "missing_spans": 1,
+      "missing_shingles": 14,
+      "md_tokens": 962
+    },
+    {
+      "page_key": "ScriptReference/AndroidArchitecture.None",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AndroidShowActivityIndicatorOnLoading.InversedLarge",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AndroidShowActivityIndicatorOnLoading.InversedSmall",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AndroidShowActivityIndicatorOnLoading.Small",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 40
+    },
+    {
+      "page_key": "ScriptReference/AndroidSplashScreenScale.ScaleToFit",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/AndroidTargetDevice-x86",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 38
+    },
+    {
+      "page_key": "ScriptReference/AndroidTargetDevice.ARM64",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 38
+    },
+    {
+      "page_key": "ScriptReference/AndroidTargetDevice.ARMv7",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/AnimationWindow",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 1482
+    },
+    {
+      "page_key": "ScriptReference/Animations.AnimationScriptPlayable",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 221
+    },
+    {
+      "page_key": "ScriptReference/AnimatorControllerParameterType.Bool",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/AnimatorControllerParameterType.Float",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/AnimatorControllerParameterType.Int",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/ApiCompatibilityLevel.NET_2_0",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 52
+    },
+    {
+      "page_key": "ScriptReference/AppleMobileArchitectureSimulator.Universal",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/AssetImporters.ImportLogFlags.None",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/Audio.ControlContext",
+      "missing_spans": 1,
+      "missing_shingles": 10,
+      "md_tokens": 379
+    },
+    {
+      "page_key": "ScriptReference/Audio.GeneratorInstance.IControl_1",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 160
+    },
+    {
+      "page_key": "ScriptReference/Audio.GeneratorInstance.IRealtime",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 143
+    },
+    {
+      "page_key": "ScriptReference/Audio.IAudioGenerator",
+      "missing_spans": 1,
+      "missing_shingles": 12,
+      "md_tokens": 204
+    },
+    {
+      "page_key": "ScriptReference/Audio.ProcessorInstance.UpdatedDataContext",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 87
+    },
+    {
+      "page_key": "ScriptReference/Audio.RealtimeContext",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 146
+    },
+    {
+      "page_key": "ScriptReference/Audio.RootOutputInstance.IControl_1",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 150
+    },
+    {
+      "page_key": "ScriptReference/Audio.RootOutputInstance.IRealtime",
+      "missing_spans": 1,
+      "missing_shingles": 10,
+      "md_tokens": 222
+    },
+    {
+      "page_key": "ScriptReference/AudioClip",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 654
+    },
+    {
+      "page_key": "ScriptReference/AudioCompressionFormat.AAC",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.Alley",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.Arena",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.Auditorium",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.Bathroom",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.CarpetedHallway",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.Cave",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.City",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.Concerthall",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.Dizzy",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.Drugged",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.Forest",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.Hallway",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.Hangar",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.Livingroom",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.Mountains",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.PaddedCell",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.ParkingLot",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.Plain",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.Psychotic",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.Quarry",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.Room",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.SewerPipe",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.StoneCorridor",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.Stoneroom",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AudioReverbPreset.Underwater",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/AvatarMaskBodyPart.LeftFootIK",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/AvatarMaskBodyPart.LeftHandIK",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/AvatarMaskBodyPart.RightFootIK",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/AvatarMaskBodyPart.RightHandIK",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/Build.DefaultLaunchReport",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 104
+    },
+    {
+      "page_key": "ScriptReference/Build.OSArchitecture-x64ARM64",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Build.OSArchitecture-x86",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/BuildTargetGroup.CloudRendering",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/BuildTargetGroup.LinuxHeadlessSimulation",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/BuildTargetGroup.Switch",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/BuildTargetGroup.Unknown",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/BuildTargetGroup.VisionOS",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/BuildTargetGroup.iOS",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/CanvasGroup",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 938
+    },
+    {
+      "page_key": "ScriptReference/ColorPrimaries.P3",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/Compilation.AssemblyBuilderFlags.None",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Compilation.AssemblyFlags.None",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Compilation.CompilerMessageType.Info",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/Connect.CoppaDrawer",
+      "missing_spans": 1,
+      "missing_shingles": 13,
+      "md_tokens": 164
+    },
+    {
+      "page_key": "ScriptReference/Connect.ProjectBindDrawer",
+      "missing_spans": 1,
+      "missing_shingles": 13,
+      "md_tokens": 158
+    },
+    {
+      "page_key": "ScriptReference/D3D12DeviceFilterLists-ctor",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 35
+    },
+    {
+      "page_key": "ScriptReference/DefaultLightingExplorerExtension",
+      "missing_spans": 1,
+      "missing_shingles": 14,
+      "md_tokens": 206
+    },
+    {
+      "page_key": "ScriptReference/DrawCameraMode.LitClustering",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/Experimental.GraphView.Blackboard",
+      "missing_spans": 1,
+      "missing_shingles": 10,
+      "md_tokens": 2863
+    },
+    {
+      "page_key": "ScriptReference/Experimental.GraphView.GraphElement",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 2593
+    },
+    {
+      "page_key": "ScriptReference/Experimental.GraphView.GraphView",
+      "missing_spans": 1,
+      "missing_shingles": 10,
+      "md_tokens": 3265
+    },
+    {
+      "page_key": "ScriptReference/Experimental.GraphView.Group",
+      "missing_spans": 1,
+      "missing_shingles": 14,
+      "md_tokens": 3016
+    },
+    {
+      "page_key": "ScriptReference/Experimental.GraphView.Node",
+      "missing_spans": 1,
+      "missing_shingles": 10,
+      "md_tokens": 2877
+    },
+    {
+      "page_key": "ScriptReference/Experimental.GraphView.SelectionDropper-prevDropTarget",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 63
+    },
+    {
+      "page_key": "ScriptReference/Experimental.GraphView.StackNode",
+      "missing_spans": 1,
+      "missing_shingles": 12,
+      "md_tokens": 3225
+    },
+    {
+      "page_key": "ScriptReference/Experimental.GraphView.StickyNote",
+      "missing_spans": 1,
+      "missing_shingles": 10,
+      "md_tokens": 2737
+    },
+    {
+      "page_key": "ScriptReference/Experimental.GraphView.StickyNoteFontSize.Huge",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 64
+    },
+    {
+      "page_key": "ScriptReference/Experimental.GraphView.StickyNoteFontSize.Small",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 64
+    },
+    {
+      "page_key": "ScriptReference/Experimental.GraphView.StickyNoteTheme.Black",
+      "missing_spans": 1,
+      "missing_shingles": 10,
+      "md_tokens": 64
+    },
+    {
+      "page_key": "ScriptReference/Experimental.Rendering.ScriptableBakedReflectionSystem",
+      "missing_spans": 1,
+      "missing_shingles": 13,
+      "md_tokens": 213
+    },
+    {
+      "page_key": "ScriptReference/Experimental.Rendering.ScriptableRuntimeReflectionSystem",
+      "missing_spans": 1,
+      "missing_shingles": 10,
+      "md_tokens": 108
+    },
+    {
+      "page_key": "ScriptReference/GridBrushBase.RotationDirection.Clockwise",
+      "missing_spans": 1,
+      "missing_shingles": 10,
+      "md_tokens": 49
+    },
+    {
+      "page_key": "ScriptReference/ILogger",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 178
+    },
+    {
+      "page_key": "ScriptReference/IMECompositionMode.Off",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/IMECompositionMode.On",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/IntegratedSubsystem",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 213
+    },
+    {
+      "page_key": "ScriptReference/IntegratedSubsystemDescriptor",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 82
+    },
+    {
+      "page_key": "ScriptReference/IntegrityCheckLevel.Medium",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.B",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.BackQuote",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.Backslash",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.Backspace",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.CapsLock",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.Clear",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.Comma",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.D",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.DownArrow",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.E",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.End",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.Equals",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.Escape",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F1",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F10",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F11",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F12",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F13",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F14",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F15",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F16",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F17",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F18",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F19",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F2",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F20",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F21",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F22",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F23",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F24",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F3",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F4",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F5",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F6",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F7",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F8",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.F9",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.G",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.H",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.Home",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.I",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.Insert",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.J",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.K",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.L",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.LeftAlt",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.LeftApple",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.LeftArrow",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.LeftCommand",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.LeftControl",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.LeftShift",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.M",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.Menu",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.Minus",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.N",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.Numlock",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.O",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.P",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.PageDown",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.PageUp",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.Period",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.Print",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.Q",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.Quote",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.R",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.RightAlt",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.RightApple",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.RightArrow",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.RightCommand",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.RightControl",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.RightShift",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.S",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.ScrollLock",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.Semicolon",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.Slash",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.Space",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.T",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.Tab",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.U",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.V",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.W",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.WheelDown",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/KeyCode.WheelUp",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/LightTransport.PostProcessing.RadeonRaysProbePostProcessor",
+      "missing_spans": 1,
+      "missing_shingles": 15,
+      "md_tokens": 245
+    },
+    {
+      "page_key": "ScriptReference/LightTransport.PostProcessing.ReferenceProbePostProcessor",
+      "missing_spans": 1,
+      "missing_shingles": 15,
+      "md_tokens": 224
+    },
+    {
+      "page_key": "ScriptReference/LightTransport.ProbeBakeRequestOutput.Validity",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/LightTransport.RadeonRaysContext",
+      "missing_spans": 1,
+      "missing_shingles": 13,
+      "md_tokens": 253
+    },
+    {
+      "page_key": "ScriptReference/LightTransport.RadeonRaysProbeIntegrator",
+      "missing_spans": 1,
+      "missing_shingles": 14,
+      "md_tokens": 164
+    },
+    {
+      "page_key": "ScriptReference/LightTransport.RadeonRaysWorld",
+      "missing_spans": 1,
+      "missing_shingles": 13,
+      "md_tokens": 137
+    },
+    {
+      "page_key": "ScriptReference/LightTransport.ReferenceContext",
+      "missing_spans": 1,
+      "missing_shingles": 12,
+      "md_tokens": 285
+    },
+    {
+      "page_key": "ScriptReference/LogOption.None",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/Logger",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 292
+    },
+    {
+      "page_key": "ScriptReference/LowLevelPhysics.GeometryType.Box",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/LowLevelPhysics.GeometryType.Sphere",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/MPE.ProcessEvent.AfterDomainReload",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/MaterialPropertyType.Int",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/MaterialPropertyType.Matrix",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/MaterialPropertyType.Vector",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/MessageType.Info",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/MessageType.None",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/NPOTSupport.Full",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/NVIDIA.DLSSFeatureFlags.None",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Networking.MultipartFormDataSection",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 191
+    },
+    {
+      "page_key": "ScriptReference/Networking.MultipartFormFileSection",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 208
+    },
+    {
+      "page_key": "ScriptReference/Networking.PlayerConnection.EditorConnection",
+      "missing_spans": 1,
+      "missing_shingles": 12,
+      "md_tokens": 981
+    },
+    {
+      "page_key": "ScriptReference/Networking.PlayerConnection.PlayerConnection",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 666
+    },
+    {
+      "page_key": "ScriptReference/Networking.UnityWebRequest.Result.Success",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 53
+    },
+    {
+      "page_key": "ScriptReference/ObjectMatchMode.ByName",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/Overlays.ISupportsOverlaysWithFilter",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 292
+    },
+    {
+      "page_key": "ScriptReference/Overlays.ToolbarOverlay",
+      "missing_spans": 1,
+      "missing_shingles": 14,
+      "md_tokens": 1451
+    },
+    {
+      "page_key": "ScriptReference/ParticleSystemCollisionQuality.Medium",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/ParticleSystemShapeTextureChannel.Blue",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/ParticleSystemShapeTextureChannel.Green",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/ParticleSystemShapeTextureChannel.Red",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/PenEventType.NoContact",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/PhysicsVisualizationSettings.QueryFilter.None",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 48
+    },
+    {
+      "page_key": "ScriptReference/PlayModeWindow.PlayModeViewTypes.GameView",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 49
+    },
+    {
+      "page_key": "ScriptReference/Playables.Notification",
+      "missing_spans": 1,
+      "missing_shingles": 10,
+      "md_tokens": 106
+    },
+    {
+      "page_key": "ScriptReference/Playables.PlayableAsset",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 477
+    },
+    {
+      "page_key": "ScriptReference/Playables.PlayableBehaviour",
+      "missing_spans": 1,
+      "missing_shingles": 10,
+      "md_tokens": 630
+    },
+    {
+      "page_key": "ScriptReference/Playables.PlayableDirector",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 1427
+    },
+    {
+      "page_key": "ScriptReference/Pool.LinkedPool_1",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 678
+    },
+    {
+      "page_key": "ScriptReference/Pool.ObjectPool_1",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 744
+    },
+    {
+      "page_key": "ScriptReference/ProfilerWindow",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 1588
+    },
+    {
+      "page_key": "ScriptReference/Profiling.ProfilerArea.GlobalIllumination",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Profiling.ProfilerArea.NetworkMessages",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Profiling.ProfilerArea.NetworkOperations",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Profiling.ProfilerArea.Physics",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Profiling.ProfilerArea.Physics2D",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Profiling.ProfilerArea.Video",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Profiling.ProfilerArea.VirtualTexturing",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/RectTransform.Axis.Horizontal",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 49
+    },
+    {
+      "page_key": "ScriptReference/RectTransform.Axis.Vertical",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 49
+    },
+    {
+      "page_key": "ScriptReference/RectTransform.Edge.Bottom",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 49
+    },
+    {
+      "page_key": "ScriptReference/RectTransform.Edge.Top",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 49
+    },
+    {
+      "page_key": "ScriptReference/Rendering.BatchCullingFlags.None",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.BatchID",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 50
+    },
+    {
+      "page_key": "ScriptReference/Rendering.BuiltinRenderTextureType.RenderTexture",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.CameraEvent.AfterImageEffects",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.CameraEvent.BeforeImageEffects",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.ColorWriteMask.Alpha",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.ColorWriteMask.Blue",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.ColorWriteMask.Green",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.ColorWriteMask.Red",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.FoveatedRenderingMode.Disabled",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.GraphicsDeviceType.Vulkan",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 44
+    },
+    {
+      "page_key": "ScriptReference/Rendering.GraphicsDeviceType.WebGPU",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/Rendering.IRenderPipelineGraphicsSettingsContextMenu2_1",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 262
+    },
+    {
+      "page_key": "ScriptReference/Rendering.IRenderPipelineGraphicsSettingsContextMenu_1",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 156
+    },
+    {
+      "page_key": "ScriptReference/Rendering.IRenderPipelineResources",
+      "missing_spans": 1,
+      "missing_shingles": 14,
+      "md_tokens": 254
+    },
+    {
+      "page_key": "ScriptReference/Rendering.MachineLearningDataType.Unknown",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.MachineLearningOperatorType.Conv",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/Rendering.MachineLearningOperatorType.Identity",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/Rendering.MachineLearningOperatorType.None",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.MachineLearningOperatorType.ReduceMax",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.MachineLearningOperatorType.ReduceMean",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.MachineLearningOperatorType.ReduceMin",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.MachineLearningOperatorType.ReduceProd",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.PassType.ScriptableRenderPipeline",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.RenderingLayersLimitSettings",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 96
+    },
+    {
+      "page_key": "ScriptReference/Rendering.ShaderParamType.Bool",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/Rendering.ShaderParamType.Short",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/Rendering.ShaderParamType.UInt",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.ShaderRequirements.None",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.ShadingRateCombinerStage.Fragment",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.ShadingRateCombinerStage.Primitive",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/Rendering.UVChannelFlags.UV1",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.UVChannelFlags.UV2",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.UVChannelFlags.UV3",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Rendering.VirtualTexturing.FilterMode.Bilinear",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 71
+    },
+    {
+      "page_key": "ScriptReference/Rendering.VirtualTexturing.FilterMode.Trilinear",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 71
+    },
+    {
+      "page_key": "ScriptReference/RenderingPath.VertexLit",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/RotationDriveMode.Slerp",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/SceneTemplate.SceneTemplatePipelineAdapter",
+      "missing_spans": 1,
+      "missing_shingles": 13,
+      "md_tokens": 132
+    },
+    {
+      "page_key": "ScriptReference/SceneView",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 2118
+    },
+    {
+      "page_key": "ScriptReference/Search.IFilterNode",
+      "missing_spans": 1,
+      "missing_shingles": 10,
+      "md_tokens": 151
+    },
+    {
+      "page_key": "ScriptReference/Search.INestedQueryNode",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 81
+    },
+    {
+      "page_key": "ScriptReference/Search.ISearchNode",
+      "missing_spans": 1,
+      "missing_shingles": 10,
+      "md_tokens": 88
+    },
+    {
+      "page_key": "ScriptReference/Search.QueryNodeType.Aggregator",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/Search.QueryNodeType.And",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/Search.QueryNodeType.Comment",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/Search.QueryNodeType.Filter",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/Search.QueryNodeType.Group",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/Search.QueryNodeType.Intersection",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/Search.QueryNodeType.NestedQuery",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Search.QueryNodeType.Not",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/Search.QueryNodeType.Or",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/Search.QueryNodeType.Search",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Search.QueryNodeType.Toggle",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/Search.QueryNodeType.Union",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/Search.QueryNodeType.Where",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/Search.SearchExpressionKeyword.None",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/Search.SearchItemOptions.None",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/SearchService.IObjectSelectorEngine",
+      "missing_spans": 1,
+      "missing_shingles": 10,
+      "md_tokens": 67
+    },
+    {
+      "page_key": "ScriptReference/SearchService.ObjectSelectorSearchContext",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 246
+    },
+    {
+      "page_key": "ScriptReference/SearchService.ProjectSearchContext",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 151
+    },
+    {
+      "page_key": "ScriptReference/SearchService.SceneSearchContext",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 166
+    },
+    {
+      "page_key": "ScriptReference/ShaderUtil.ShaderPropertyType.Color",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 53
+    },
+    {
+      "page_key": "ScriptReference/ShaderUtil.ShaderPropertyType.Float",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 53
+    },
+    {
+      "page_key": "ScriptReference/ShaderUtil.ShaderPropertyType.Int",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 53
+    },
+    {
+      "page_key": "ScriptReference/ShaderUtil.ShaderPropertyType.Range",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 53
+    },
+    {
+      "page_key": "ScriptReference/ShaderUtil.ShaderPropertyType.Vector",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 53
+    },
+    {
+      "page_key": "ScriptReference/ShortcutManagement.ShortcutModifiers.None",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/ShortcutManagement.ShortcutModifiers.Shift",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/SocialPlatforms.GameCenter.GameCenterPlatform",
+      "missing_spans": 1,
+      "missing_shingles": 13,
+      "md_tokens": 446
+    },
+    {
+      "page_key": "ScriptReference/SocialPlatforms.ILocalUser",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 58
+    },
+    {
+      "page_key": "ScriptReference/Subsystem",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 188
+    },
+    {
+      "page_key": "ScriptReference/SubsystemDescriptor",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 86
+    },
+    {
+      "page_key": "ScriptReference/SubsystemsImplementation.SubsystemDescriptorWithProvider",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 91
+    },
+    {
+      "page_key": "ScriptReference/SubsystemsImplementation.SubsystemWithProvider",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 317
+    },
+    {
+      "page_key": "ScriptReference/TerrainQualityOverrides.BasemapDistance",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 47
+    },
+    {
+      "page_key": "ScriptReference/TerrainQualityOverrides.BillboardStart",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 47
+    },
+    {
+      "page_key": "ScriptReference/TerrainQualityOverrides.DetailDensity",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 47
+    },
+    {
+      "page_key": "ScriptReference/TerrainQualityOverrides.DetailDistance",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 47
+    },
+    {
+      "page_key": "ScriptReference/TerrainQualityOverrides.FadeLength",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 47
+    },
+    {
+      "page_key": "ScriptReference/TerrainQualityOverrides.MaxTrees",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 47
+    },
+    {
+      "page_key": "ScriptReference/TerrainQualityOverrides.None",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/TerrainQualityOverrides.PixelError",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 47
+    },
+    {
+      "page_key": "ScriptReference/TerrainQualityOverrides.TreeDistance",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 47
+    },
+    {
+      "page_key": "ScriptReference/TerrainRenderFlags.All",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/TerrainRenderFlags.Details",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/TerrainTools.OnInspectorGUIContext",
+      "missing_spans": 1,
+      "missing_shingles": 12,
+      "md_tokens": 134
+    },
+    {
+      "page_key": "ScriptReference/TerrainTools.TerrainToolShortcutContext",
+      "missing_spans": 1,
+      "missing_shingles": 13,
+      "md_tokens": 103
+    },
+    {
+      "page_key": "ScriptReference/TextureCompressionQuality.Best",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/TextureCompressionQuality.Normal",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/ThreadPriority.High",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/ThreadPriority.Low",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/Tilemaps.TileFlags.LockAll",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.AbstractProgressBar",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 2445
+    },
+    {
+      "page_key": "ScriptReference/UIElements.Align.Auto",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.ArcDirection.Clockwise",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.BaseSlider_1",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 3108
+    },
+    {
+      "page_key": "ScriptReference/UIElements.BindableElement",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 2276
+    },
+    {
+      "page_key": "ScriptReference/UIElements.BindingLogLevel.None",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.CallbackEventHandler",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 285
+    },
+    {
+      "page_key": "ScriptReference/UIElements.CallbackOptions.Default",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.ChangeEvent_1",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 723
+    },
+    {
+      "page_key": "ScriptReference/UIElements.Column",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 507
+    },
+    {
+      "page_key": "ScriptReference/UIElements.ColumnSortingMode.None",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.Columns",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 413
+    },
+    {
+      "page_key": "ScriptReference/UIElements.CommandEventBase_1",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 744
+    },
+    {
+      "page_key": "ScriptReference/UIElements.DataBinding",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 583
+    },
+    {
+      "page_key": "ScriptReference/UIElements.DragAndDropEventBase_1",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 984
+    },
+    {
+      "page_key": "ScriptReference/UIElements.Experimental.ValueAnimation_1",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 393
+    },
+    {
+      "page_key": "ScriptReference/UIElements.FilterParameterType.Color",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.FlexDirection.Column",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.FlexDirection.ColumnReverse",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.FlexDirection.Row",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.FlexDirection.RowReverse",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.FocusEventBase_1",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 758
+    },
+    {
+      "page_key": "ScriptReference/UIElements.Foldout",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 2588
+    },
+    {
+      "page_key": "ScriptReference/UIElements.HelpBoxMessageType.Info",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/UIElements.HelpBoxMessageType.None",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/UIElements.IRuntimePanel",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 109
+    },
+    {
+      "page_key": "ScriptReference/UIElements.ITextElementExperimentalFeatures",
+      "missing_spans": 1,
+      "missing_shingles": 13,
+      "md_tokens": 75
+    },
+    {
+      "page_key": "ScriptReference/UIElements.IUxmlFactory",
+      "missing_spans": 1,
+      "missing_shingles": 12,
+      "md_tokens": 70
+    },
+    {
+      "page_key": "ScriptReference/UIElements.KeyboardEventBase_1",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 939
+    },
+    {
+      "page_key": "ScriptReference/UIElements.Manipulator",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 121
+    },
+    {
+      "page_key": "ScriptReference/UIElements.MouseCaptureEventBase_1",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 834
+    },
+    {
+      "page_key": "ScriptReference/UIElements.MouseEventBase_1",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 972
+    },
+    {
+      "page_key": "ScriptReference/UIElements.NavigationEventBase_1",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 869
+    },
+    {
+      "page_key": "ScriptReference/UIElements.NavigationMoveEvent.Direction.None",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 53
+    },
+    {
+      "page_key": "ScriptReference/UIElements.PanelChangedEventBase_1",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 783
+    },
+    {
+      "page_key": "ScriptReference/UIElements.PenButton.PenEraser",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.Pivot.BottomLeft",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.Pivot.BottomRight",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.Pivot.TopLeft",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.Pivot.TopRight",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.PointerCaptureEventBase_1",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 753
+    },
+    {
+      "page_key": "ScriptReference/UIElements.PointerEventBase_1",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 1440
+    },
+    {
+      "page_key": "ScriptReference/UIElements.PropertyField",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 2408
+    },
+    {
+      "page_key": "ScriptReference/UIElements.SearchFieldBase_2",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 2488
+    },
+    {
+      "page_key": "ScriptReference/UIElements.SelectionType.None",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.SortColumnDescription",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 150
+    },
+    {
+      "page_key": "ScriptReference/UIElements.SortDirection.Ascending",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.SortDirection.Descending",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.TextValueField_1",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 3324
+    },
+    {
+      "page_key": "ScriptReference/UIElements.ToolbarMenu",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 2680
+    },
+    {
+      "page_key": "ScriptReference/UIElements.ToolbarPopupSearchField",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 2659
+    },
+    {
+      "page_key": "ScriptReference/UIElements.TransitionEventBase_1",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 747
+    },
+    {
+      "page_key": "ScriptReference/UIElements.UxmlFactory_2",
+      "missing_spans": 1,
+      "missing_shingles": 10,
+      "md_tokens": 138
+    },
+    {
+      "page_key": "ScriptReference/UIElements.VersionChangeType.Styles",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.VersionChangeType.ViewData",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/UIElements.VisualElementFocusRing",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 153
+    },
+    {
+      "page_key": "ScriptReference/UIOrientation.AutoRotation",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/UIOrientation.PortraitUpsideDown",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/Unity.Android.Gradle.Manifest.Unit.In",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 57
+    },
+    {
+      "page_key": "ScriptReference/Unity.Android.Gradle.Manifest.Unit.Mm",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 57
+    },
+    {
+      "page_key": "ScriptReference/Unity.Android.Gradle.Manifest.Unit.Pt",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 57
+    },
+    {
+      "page_key": "ScriptReference/Unity.Android.Gradle.Manifest.Unit.Px",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 57
+    },
+    {
+      "page_key": "ScriptReference/Unity.Android.Gradle.RepositoriesMode.Null",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 54
+    },
+    {
+      "page_key": "ScriptReference/Unity.Collections.Allocator.None",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 50
+    },
+    {
+      "page_key": "ScriptReference/Unity.Hierarchy.HierarchyPropertyString",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 132
+    },
+    {
+      "page_key": "ScriptReference/Unity.Hierarchy.HierarchyPropertyUnmanaged_1",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 144
+    },
+    {
+      "page_key": "ScriptReference/Unity.Hierarchy.HierarchyTraversalDirection.Children",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 50
+    },
+    {
+      "page_key": "ScriptReference/Unity.Hierarchy.HierarchyTraversalDirection.Parents",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 50
+    },
+    {
+      "page_key": "ScriptReference/Unity.IO.Archive.ArchiveStatus.Complete",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 54
+    },
+    {
+      "page_key": "ScriptReference/Unity.IO.LowLevel.Unsafe.AsyncReadManagerMetrics.Flags.None",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 65
+    },
+    {
+      "page_key": "ScriptReference/Unity.IO.LowLevel.Unsafe.FileReadType.Async",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 58
+    },
+    {
+      "page_key": "ScriptReference/Unity.IO.LowLevel.Unsafe.FileReadType.Sync",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 58
+    },
+    {
+      "page_key": "ScriptReference/Unity.IO.LowLevel.Unsafe.Priority.PriorityHigh",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 58
+    },
+    {
+      "page_key": "ScriptReference/Unity.IO.LowLevel.Unsafe.Priority.PriorityLow",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 58
+    },
+    {
+      "page_key": "ScriptReference/Unity.Jobs.LowLevel.Unsafe.JobRanges.PhaseData",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 58
+    },
+    {
+      "page_key": "ScriptReference/Unity.Profiling.ProfilerCounterOptions.None",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 50
+    },
+    {
+      "page_key": "ScriptReference/Unity.Properties.ConcreteTypeVisitor",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 114
+    },
+    {
+      "page_key": "ScriptReference/Unity.Properties.ContainerPropertyBag_1",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 321
+    },
+    {
+      "page_key": "ScriptReference/Unity.Properties.IDictionaryElementProperty_1",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 89
+    },
+    {
+      "page_key": "ScriptReference/Unity.Properties.IPropertyBag_1",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 139
+    },
+    {
+      "page_key": "ScriptReference/Unity.Properties.ISetElementProperty_1",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 88
+    },
+    {
+      "page_key": "ScriptReference/Unity.Properties.KeyValuePairPropertyBag_2",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 241
+    },
+    {
+      "page_key": "ScriptReference/Unity.Properties.PathVisitor",
+      "missing_spans": 1,
+      "missing_shingles": 11,
+      "md_tokens": 170
+    },
+    {
+      "page_key": "ScriptReference/Unity.VectorGraphics.GradientFill",
+      "missing_spans": 1,
+      "missing_shingles": 13,
+      "md_tokens": 231
+    },
+    {
+      "page_key": "ScriptReference/Unity.VectorGraphics.GradientFillType.Linear",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 50
+    },
+    {
+      "page_key": "ScriptReference/Unity.VectorGraphics.PathCorner.Beveled",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 50
+    },
+    {
+      "page_key": "ScriptReference/Unity.VectorGraphics.PathCorner.Round",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 50
+    },
+    {
+      "page_key": "ScriptReference/Unity.VectorGraphics.PatternFill",
+      "missing_spans": 1,
+      "missing_shingles": 14,
+      "md_tokens": 134
+    },
+    {
+      "page_key": "ScriptReference/Unity.VectorGraphics.SolidFill",
+      "missing_spans": 1,
+      "missing_shingles": 10,
+      "md_tokens": 101
+    },
+    {
+      "page_key": "ScriptReference/Unity.VectorGraphics.TextureFill",
+      "missing_spans": 1,
+      "missing_shingles": 13,
+      "md_tokens": 140
+    },
+    {
+      "page_key": "ScriptReference/Unity.VectorGraphics.VectorUtils.Alignment.BottomLeft",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 57
+    },
+    {
+      "page_key": "ScriptReference/Unity.VectorGraphics.VectorUtils.Alignment.BottomRight",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 57
+    },
+    {
+      "page_key": "ScriptReference/Unity.VectorGraphics.VectorUtils.Alignment.TopLeft",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 57
+    },
+    {
+      "page_key": "ScriptReference/Unity.VectorGraphics.VectorUtils.Alignment.TopRight",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 57
+    },
+    {
+      "page_key": "ScriptReference/ValidationLevel.Medium",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/VersionControl.FileMode.Binary",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/VersionControl.FileMode.None",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/VersionControl.ResolveMethod.UseMerged",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/VersionControl.SubmitResult.ConflictingFiles",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/VersionControl.SubmitResult.OK",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/VideoSpatialQuality.HighSpatialQuality",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/VulkanDeviceFilterLists-ctor",
+      "missing_spans": 1,
+      "missing_shingles": 5,
+      "md_tokens": 35
+    },
+    {
+      "page_key": "ScriptReference/Windows.Speech.ConfidenceLevel.High",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 50
+    },
+    {
+      "page_key": "ScriptReference/Windows.Speech.ConfidenceLevel.Low",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 50
+    },
+    {
+      "page_key": "ScriptReference/Windows.Speech.ConfidenceLevel.Medium",
+      "missing_spans": 1,
+      "missing_shingles": 6,
+      "md_tokens": 50
+    },
+    {
+      "page_key": "ScriptReference/Windows.Speech.ConfidenceLevel.Rejected",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 50
+    },
+    {
+      "page_key": "ScriptReference/Windows.Speech.SpeechError.NoError",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 50
+    },
+    {
+      "page_key": "ScriptReference/WindowsGamepadBackendHint.WindowsGamepadBackendHintWindowsGamingInput",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/WindowsGamepadBackendHint.WindowsGamepadBackendHintXInput",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPad10Gen",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPad6Gen",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPad7Gen",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPad8Gen",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPad9Gen",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPadUnknown",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone11Pro",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone12Mini",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone12Pro",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone13",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone13Mini",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone13Pro",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone14",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone14Plus",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone14Pro",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone15Plus",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone15Pro",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone16",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone16Plus",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone16Pro",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone16e",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone17",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone17Pro",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone17e",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone5",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 44
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone5C",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone5S",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone6Plus",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone6S",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone6SPlus",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone7Plus",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhone8Plus",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhoneAir",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhoneUnknown",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 46
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhoneXR",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhoneXS",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/iOS.DeviceGeneration-iPhoneXSMax",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 45
+    },
+    {
+      "page_key": "ScriptReference/iOS.Xcode.XcScheme.FrameCaptureMode.Metal",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 55
+    },
+    {
+      "page_key": "ScriptReference/iOS.Xcode.XcScheme.MetalValidation.Extended",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 55
+    },
+    {
+      "page_key": "ScriptReference/iOSBackgroundMode.BackgroundFetch",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/iOSBackgroundMode.ExternalAccessoryCommunication",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/iOSBackgroundMode.LocationUpdates",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/iOSBackgroundMode.NearbyInteraction",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/iOSBackgroundMode.NetworkAuthentication",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/iOSBackgroundMode.NewsstandDownloads",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/iOSBackgroundMode.PushToTalk",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/iOSBackgroundMode.RemoteNotifications",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 41
+    },
+    {
+      "page_key": "ScriptReference/iOSBackgroundMode.VoiceOverIP",
+      "missing_spans": 1,
+      "missing_shingles": 9,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/iOSTargetDevice-iPhoneOnly",
+      "missing_spans": 1,
+      "missing_shingles": 7,
+      "md_tokens": 42
+    },
+    {
+      "page_key": "ScriptReference/tvOS.DeviceGeneration.AppleTVHD",
+      "missing_spans": 1,
+      "missing_shingles": 8,
+      "md_tokens": 46
+    }
   ]
 }

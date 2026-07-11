@@ -120,7 +120,7 @@ func buildAuditFixture(t *testing.T) (string, string) {
 }
 
 func fixtureAuditConfig() auditConfig {
-	return auditConfig{shingleN: 5, maxDF: 4, minRun: 5, ratioFactor: 0.4, ratioMinTok: 30, maxQuotes: 5}
+	return auditConfig{shingleN: 5, maxDF: 4, minRun: 5, ratioFactor: 0.4, ratioGate: 0.25, ratioMinTok: 30, maxQuotes: 5}
 }
 
 // runFixtureAudit audits the synthetic corpus and returns the flags keyed by page.
@@ -190,33 +190,43 @@ func TestAuditChromeOnlyDifferenceNotFlagged(t *testing.T) {
 }
 
 // The baseline allowlist is the CI gate over the accepted false-positive floor: known flags
-// are baselined, NEW flags gate, and entries that stop flagging are reported as stale.
+// are baselined AT THEIR RECORDED MAGNITUDE, new flags and worsened known flags gate, and
+// entries that stop flagging are reported as stale.
 func TestAuditBaselinePartitionAndRoundTrip(t *testing.T) {
-	mk := func(key string, spans int) *auditFlag {
-		return &auditFlag{PageKey: key, MissingSpans: spans}
+	mk := func(key string, spans, windows, mdTok int) *auditFlag {
+		return &auditFlag{PageKey: key, MissingSpans: spans, MissingWindow: windows, MDTokens: mdTok}
 	}
-	flagged := []*auditFlag{mk("Manual/A", 1), mk("Manual/B", 2), mk("Manual/RatioOnly", 0)}
+	flagged := []*auditFlag{mk("Manual/A", 1, 5, 100), mk("Manual/B", 2, 10, 200), mk("Manual/RatioOnly", 0, 0, 50)}
 
-	// No baseline: every content-loss flag is new; ratio-only flags never count.
+	// No baseline: every gating flag is new; advisory ratio-only flags never count.
 	if newFlags, stale := applyAuditBaseline(flagged, nil); newFlags != 2 || stale != 0 {
 		t.Errorf("nil baseline: new=%d stale=%d, want 2/0", newFlags, stale)
 	}
 
-	// Round-trip through the file format.
+	// Round-trip through the v2 file format: magnitudes and page count are pinned.
 	path := filepath.Join(t.TempDir(), "baseline.json")
-	if err := writeAuditBaseline(path, flagged); err != nil {
+	if err := writeAuditBaseline(path, &auditResult{pages: make([]pageRef, 12), flagged: flagged}); err != nil {
 		t.Fatal(err)
 	}
 	base, err := loadAuditBaseline(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(base.PageKeys) != 2 || base.PageKeys[0] != "Manual/A" || base.PageKeys[1] != "Manual/B" {
-		t.Fatalf("baseline must hold the sorted content-loss keys only: %v", base.PageKeys)
+	if len(base.Pages) != 2 || base.Pages[0].PageKey != "Manual/A" || base.Pages[1].PageKey != "Manual/B" {
+		t.Fatalf("baseline must hold the sorted gating entries only: %+v", base.Pages)
+	}
+	if base.Pages[0].MissingSpans != 1 || base.Pages[0].MissingShingles != 5 || base.Pages[0].MDTokens != 100 {
+		t.Fatalf("entry must pin the flag magnitude: %+v", base.Pages[0])
+	}
+	if base.PageCount != 12 {
+		t.Fatalf("baseline must pin the corpus page count, got %d", base.PageCount)
+	}
+	if base.legacy() {
+		t.Fatal("v2 baseline must not read as legacy")
 	}
 
-	// Full coverage: nothing new, flags marked baselined.
-	flagged = []*auditFlag{mk("Manual/A", 1), mk("Manual/B", 2)}
+	// Full coverage at identical magnitude: nothing new, flags marked baselined.
+	flagged = []*auditFlag{mk("Manual/A", 1, 5, 100), mk("Manual/B", 2, 10, 200)}
 	if newFlags, stale := applyAuditBaseline(flagged, base); newFlags != 0 || stale != 0 {
 		t.Errorf("covered run: new=%d stale=%d, want 0/0", newFlags, stale)
 	}
@@ -224,14 +234,71 @@ func TestAuditBaselinePartitionAndRoundTrip(t *testing.T) {
 		t.Error("covered flags must be marked baselined")
 	}
 
+	// An IMPROVED baselined page stays covered (floor shrinks on the next regeneration).
+	flagged = []*auditFlag{mk("Manual/A", 1, 3, 150), mk("Manual/B", 2, 10, 200)}
+	if newFlags, _ := applyAuditBaseline(flagged, base); newFlags != 0 {
+		t.Errorf("improved baselined page must stay covered, new=%d", newFlags)
+	}
+
+	// A WORSENED baselined page re-gates - this is the anti-hiding guarantee: more spans,
+	// more missing shingles, or fewer derived tokens each break coverage.
+	for _, worse := range []*auditFlag{
+		mk("Manual/A", 2, 5, 100), // more spans
+		mk("Manual/A", 1, 9, 100), // more missing shingles
+		mk("Manual/A", 1, 5, 40),  // derived markdown shrank
+	} {
+		flagged = []*auditFlag{worse, mk("Manual/B", 2, 10, 200)}
+		newFlags, stale := applyAuditBaseline(flagged, base)
+		if newFlags != 1 {
+			t.Errorf("worsened baselined page %+v must gate, new=%d", worse, newFlags)
+		}
+		if stale != 0 {
+			t.Errorf("worsened page is not stale, stale=%d", stale)
+		}
+	}
+
 	// A new regression alongside the known floor gates; a fixed page goes stale.
-	flagged = []*auditFlag{mk("Manual/A", 1), mk("Manual/NewRegression", 3)}
+	flagged = []*auditFlag{mk("Manual/A", 1, 5, 100), mk("Manual/NewRegression", 3, 20, 10)}
 	newFlags, stale := applyAuditBaseline(flagged, base)
 	if newFlags != 1 || stale != 1 {
 		t.Errorf("new+stale run: new=%d stale=%d, want 1/1", newFlags, stale)
 	}
 	if flagged[1].Baselined {
 		t.Error("unbaselined new flag must not be marked baselined")
+	}
+
+	// A gating ratio collapse is baseline-coverable through its pinned md_tokens too.
+	gated := &auditFlag{PageKey: "Manual/A", RatioGated: true, MDTokens: 100}
+	if newFlags, _ := applyAuditBaseline([]*auditFlag{gated, mk("Manual/B", 2, 10, 200)}, base); newFlags != 0 {
+		t.Errorf("ratio collapse at recorded magnitude must be covered, new=%d", newFlags)
+	}
+	gated = &auditFlag{PageKey: "Manual/A", RatioGated: true, MDTokens: 10}
+	if newFlags, _ := applyAuditBaseline([]*auditFlag{gated, mk("Manual/B", 2, 10, 200)}, base); newFlags != 1 {
+		t.Errorf("deepened ratio collapse must gate, new=%d", newFlags)
+	}
+
+	// Legacy v1 baselines (bare page keys) still cover - at any magnitude - and read as legacy.
+	legacy := &auditBaseline{PageKeys: []string{"Manual/A"}}
+	if !legacy.legacy() {
+		t.Fatal("key-only baseline must read as legacy")
+	}
+	flagged = []*auditFlag{mk("Manual/A", 9, 99, 1)}
+	if newFlags, stale := applyAuditBaseline(flagged, legacy); newFlags != 0 || stale != 0 {
+		t.Errorf("legacy coverage: new=%d stale=%d, want 0/0", newFlags, stale)
+	}
+
+	// Page-count shrink math: only a shrink against a recorded count gates.
+	if got := baselinePageShrink(base, 12); got != 0 {
+		t.Errorf("equal page count must not gate, got %d", got)
+	}
+	if got := baselinePageShrink(base, 11); got != 1 {
+		t.Errorf("shrunken page count must gate, got %d", got)
+	}
+	if got := baselinePageShrink(base, 13); got != 0 {
+		t.Errorf("grown page count must not gate, got %d", got)
+	}
+	if got := baselinePageShrink(legacy, 1); got != 0 {
+		t.Errorf("legacy baseline has no recorded count to gate on, got %d", got)
 	}
 }
 
@@ -426,7 +493,7 @@ func TestAuditBaselineGatesFixtureRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(t.TempDir(), "baseline.json")
-	if err := writeAuditBaseline(path, res.flagged); err != nil {
+	if err := writeAuditBaseline(path, res); err != nil {
 		t.Fatal(err)
 	}
 	base, err := loadAuditBaseline(path)
@@ -435,5 +502,147 @@ func TestAuditBaselineGatesFixtureRun(t *testing.T) {
 	}
 	if newFlags, stale := applyAuditBaseline(res.flagged, base); newFlags != 0 || stale != 0 {
 		t.Errorf("self-baselined run: new=%d stale=%d, want 0/0", newFlags, stale)
+	}
+
+	// Blind-E2E probe replay (findings item 1): gut a BASELINED page's markdown body - its
+	// flag must escape the baseline and gate, not hide behind its page key.
+	gutted := filepath.Join(corpusDir, "text", "Manual", "TailTruncated.md")
+	if err := os.WriteFile(gutted, []byte("---\ntitle: TailTruncated\n---\n\nTailTruncated\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res2, err := auditCorpus(sourceDir, corpusDir, 4, fixtureAuditConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	newFlags, _ := applyAuditBaseline(res2.flagged, base)
+	if newFlags < 1 {
+		t.Error("gutting a baselined page must produce a NEW gating flag (magnitude pin)")
+	}
+
+	// Blind-E2E probe replay (findings item 3, upstream variant): remove a page from BOTH
+	// the source tree and pages.jsonl - count parity holds, but the baseline's recorded page
+	// count catches the shrink.
+	if err := os.Remove(filepath.Join(sourceDir, "Manual", "Page00.html")); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(corpusDir, "pages.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var kept []string
+	for _, line := range strings.Split(strings.TrimRight(string(raw), "\n"), "\n") {
+		if !strings.Contains(line, "Page00") {
+			kept = append(kept, line)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(corpusDir, "pages.jsonl"), []byte(strings.Join(kept, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res3, err := auditCorpus(sourceDir, corpusDir, 4, fixtureAuditConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := baselinePageShrink(base, len(res3.pages)); got != 1 {
+		t.Errorf("silent whole-page loss must gate via the baseline page count, shrink=%d", got)
+	}
+}
+
+// Blind-E2E probe replay (findings item 3, corpus-side variant): pages.jsonl listing fewer
+// pages than the source tree holds is a build regression or a mismatched pair - the audit
+// must refuse rather than certify the smaller set.
+func TestAuditCorpusRefusesPageCountMismatch(t *testing.T) {
+	sourceDir, corpusDir := buildAuditFixture(t)
+	raw, err := os.ReadFile(filepath.Join(corpusDir, "pages.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	if err := os.WriteFile(filepath.Join(corpusDir, "pages.jsonl"), []byte(strings.Join(lines[:len(lines)-1], "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = auditCorpus(sourceDir, corpusDir, 2, fixtureAuditConfig())
+	if err == nil {
+		t.Fatal("page-count mismatch must refuse the audit")
+	}
+	if !strings.Contains(err.Error(), "build regression") {
+		t.Errorf("mismatch error must explain itself: %v", err)
+	}
+}
+
+// A malformed pages.jsonl record is corpus corruption: silently skipping it would shrink the
+// audited page set, so the audit must error instead.
+func TestAuditCorpusRefusesMalformedPageRecord(t *testing.T) {
+	_, corpusDir := buildAuditFixture(t)
+	path := filepath.Join(corpusDir, "pages.jsonl")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(raw, []byte("{not json}\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadPageRefs(filepath.Dir(path)); err == nil || !strings.Contains(err.Error(), "malformed page record") {
+		t.Errorf("malformed record must error with its line, got: %v", err)
+	}
+}
+
+// Duplicate-family backstop (blind-E2E findings item 6): near-identical pages push every
+// shingle above max-shingle-df, so a blanked family member produces no missing-run flag -
+// the gating ratio-collapse tier must catch it instead.
+func TestAuditRatioGateCatchesBlankedDuplicate(t *testing.T) {
+	root := t.TempDir()
+	sourceDir := filepath.Join(root, "source")
+	corpusDir := filepath.Join(root, "corpus")
+	for _, d := range []string{
+		filepath.Join(sourceDir, "Manual"),
+		filepath.Join(sourceDir, "ScriptReference"),
+		filepath.Join(corpusDir, "text", "Manual"),
+	} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Six byte-identical pages (only the file name differs): every shingle has DF=6 > 4.
+	shared := make([]string, 40)
+	for i := range shared {
+		shared[i] = fmt.Sprintf("dupfam%d", i)
+	}
+	body := strings.Join(shared, " ")
+	var jsonl strings.Builder
+	for p := 0; p < 6; p++ {
+		name := fmt.Sprintf("Dup%02d", p)
+		html := `<html><body><div id="content-wrap"><p>` + body + `</p></div></body></html>`
+		if err := os.WriteFile(filepath.Join(sourceDir, "Manual", name+".html"), []byte(html), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		md := body
+		if p == 3 {
+			md = "" // the blanked family member
+		}
+		if err := os.WriteFile(filepath.Join(corpusDir, "text", "Manual", name+".md"), []byte(md), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		jsonl.WriteString(fmt.Sprintf(
+			`{"page_key":"Manual/%s","section":"Manual","source_rel":"Manual/%s.html","md_rel":"text/Manual/%s.md"}`+"\n",
+			name, name, name))
+	}
+	if err := os.WriteFile(filepath.Join(corpusDir, "pages.jsonl"), []byte(jsonl.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := auditCorpus(sourceDir, corpusDir, 2, fixtureAuditConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var blanked *auditFlag
+	for _, f := range res.flagged {
+		if f.PageKey == "Manual/Dup03" {
+			blanked = f
+		}
+		if f.MissingSpans > 0 {
+			t.Errorf("duplicate family must not produce missing-run flags, got %+v", f)
+		}
+	}
+	if blanked == nil || !blanked.RatioGated || !blanked.gates() {
+		t.Fatalf("blanked duplicate must trip the gating ratio collapse: %+v", blanked)
 	}
 }

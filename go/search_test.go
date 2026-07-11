@@ -65,3 +65,43 @@ func TestSearchCorpusMissingDB(t *testing.T) {
 		t.Fatal("expected an error when docs.sqlite is absent")
 	}
 }
+
+// Queries that break the raw FTS5 parser must fall back to the sanitized, term-quoted retry
+// instead of surfacing a parse error: unbalanced quotes ("unterminated string", which does
+// not contain the substring "syntax error" the old retry keyed on) and bareword operators
+// (whose sanitized form equals the original query, which the old retry skipped).
+func TestSearchCorpusSanitizeRetry(t *testing.T) {
+	dir := t.TempDir()
+	buildTestCorpus(t,
+		dir,
+		[]searchHit{{Section: "Manual", PageID: "not-page", Title: "Do not destroy on load", MDRel: "text/Manual/not-page.md"}},
+		map[string]string{"not-page": "objects marked do not destroy survive scene loads and reloads"},
+	)
+	cases := []struct {
+		query   string
+		wantHit bool
+	}{
+		{`"unbalanced phrase`, false},
+		{`AND OR NOT`, false},     // pure barewords: literal match, no parse error
+		{`destroy AND NOT`, true}, // operator barewords quoted to literals still match real terms
+	}
+	for _, c := range cases {
+		hits, err := searchCorpus(dir, c.query, 5)
+		if err != nil {
+			t.Errorf("searchCorpus(%q) must sanitize-retry, got error: %v", c.query, err)
+			continue
+		}
+		if c.wantHit && len(hits) == 0 {
+			t.Errorf("searchCorpus(%q) expected a hit after quoting", c.query)
+		}
+	}
+}
+
+func TestFtsQuoteTerms(t *testing.T) {
+	if got := ftsQuoteTerms("AND OR NOT"); got != `"AND" "OR" "NOT"` {
+		t.Errorf("ftsQuoteTerms = %q", got)
+	}
+	if got := ftsQuoteTerms(""); got != "" {
+		t.Errorf("empty input must stay empty, got %q", got)
+	}
+}

@@ -51,6 +51,14 @@ func writeSourceHTML(root, rel string, w io.Writer) (string, error) {
 
 	zipPath, ok := retainedZipPath(rootAbs)
 	if !ok {
+		// Distinguish "the docs are not here at all" from "the docs are here but no such
+		// page": with an extracted tree present, a failed open almost always means a
+		// misspelled source_rel, and telling the user to re-fetch would misdiagnose it.
+		if section, _, found := strings.Cut(rel, "/"); found {
+			if info, err := os.Stat(filepath.Join(rootAbs, section)); err == nil && info.IsDir() {
+				return "", fmt.Errorf("page %s not found in the extracted tree under %s (check the source_rel spelling against the page's frontmatter; no retained zip to fall back to)", rel, rootAbs)
+			}
+		}
 		return "", fmt.Errorf("neither extracted HTML nor a retained zip under %s - re-run fetch, or read the page's canonical_url online", rootAbs)
 	}
 	r, err := zip.OpenReader(zipPath)

@@ -28,7 +28,7 @@ ones. The agent needs a documentation lookup path that is:
 
 The naive offline baseline - grepping the official offline documentation zip - fails
 the first requirement badly (648 MB of HTML for Unity 6000.3) and, as the benchmark
-below shows, is ~70x slower per lookup and far worse at finding concept pages.
+below shows, is ~50x slower per lookup and far worse at finding concept pages.
 
 ## Constraints
 
@@ -111,14 +111,47 @@ trusted: the `audit` verb
 run after every transform change) re-extracts every page's visible text with an
 independent extractor that shares no code with the production parser, shingles it, and
 flags a page when a run of page-unique shingles is missing from its derived Markdown,
-with a byte-ratio outlier tier as a gross-truncation backstop. It requires the extracted
-HTML tree (`build --keep-source`), covers the full corpus in seconds, and gates on a
-checked-in baseline of individually triaged false positives
+with a gating ratio-collapse tier plus an advisory ratio-outlier tier as gross-truncation
+backstops and a source-vs-corpus page-count gate against silent whole-page loss. It
+requires the extracted HTML tree (`build --keep-source`), covers the full corpus in
+seconds, and gates on a checked-in baseline of individually triaged false positives
 ([audit-baseline-6000.3.json](audit-baseline-6000.3.json) - 496 pages, one known
-footer-adjacency class), so only new flags fail a run. The guard exists because the
-invariant silently failed once: a parser depth-tracking bug (fixed 2026-07-09) truncated
-entire sections while the unit tests, the recall benchmark, and the opt-in per-page
-verify step all stayed green.
+footer-adjacency class), so only new flags fail a run. Baseline entries pin each accepted
+page's flag magnitude and the corpus page count, so an accepted page that worsens - or a
+corpus that quietly shrinks - re-gates instead of hiding behind its allowlist entry. The
+guard exists because the invariant silently failed once: a parser depth-tracking bug
+(fixed 2026-07-09) truncated entire sections while the unit tests, the recall benchmark,
+and the opt-in per-page verify step all stayed green.
+
+#### What the audit proves - and what it does not
+
+Precisely stated, a passing audit proves: **every page listed in the corpus has no run of
+consecutive page-unique word shingles missing from its derived Markdown beyond the
+accepted baseline, no gating ratio collapse, and the page count matches the source
+tree.** That is a strong new-regression detector, not a mathematical lossless proof. The
+known false-negative classes, stated with the same candor as the false-positive floor
+above (established by an independent adversarial evaluation, 2026-07-12):
+
+- **Corpus-common content.** A shingle repeated on more than a handful of pages (shared
+  boilerplate sentences like the `hideFlags` description) is by definition not
+  page-unique, so a class-wide transform regression that strips such a sentence from
+  every page it appears on passes the page-local check. Corpus-level detection of this
+  class is planned work.
+- **Word-token granularity.** Both sides tokenize to letter/digit runs, so punctuation,
+  operators, and signs are invisible to the invariant: `return -1` degrading to
+  `return 1` does not flag. "Lossless" throughout this document means
+  *word-token-lossless*; for exact code semantics, the per-page source verification path
+  is the guarantee.
+- **Stream edges.** A loss shorter than the run threshold hard against the very start or
+  end of a page's visible-text stream can fall under the bar; interior losses down to a
+  single word token clear it. On real pages, kept boundary chrome usually rescues edge
+  detection.
+- **Duplicate-page families.** Near-identical pages push all their shingles above the
+  document-frequency cutoff, so the shingle invariant cannot see loss within the family;
+  the gating ratio-collapse tier is the backstop there (it catches a blanked or gutted
+  family member, not a small nibble).
+- **Reordering.** The invariant checks presence, not order: paragraphs shuffled within a
+  page do not flag. That is consistent with "lossy in structure" but worth stating.
 
 ### Corpus format
 

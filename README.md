@@ -30,23 +30,29 @@ Manual composition; a case counts as recalled when the expected page appears in 
 results. Reproduce with
 `bin/unity-doc-corpus-benchmark --source unity-docs --corpus unity-docs/_agent --generated-cases 1000`.
 
-Retrieval is only half the guarantee - the other half is that the transform lost no
-content. That is checked mechanically, not assumed: after every transform change,
+Retrieval is only half the guarantee - the other half is that the transform loses no
+page text. That is checked mechanically, not assumed: after every transform change,
 `bin/unity-doc-corpus audit --source unity-docs --corpus unity-docs/_agent --baseline docs/audit-baseline-6000.3.json`
 re-extracts every page's visible text with an extractor that shares no code with the
-production parser and fails if page-unique content is missing from the derived Markdown.
-It needs the extracted HTML on disk (build with `--keep-source`) and covers the full
-corpus in a few seconds. The checked-in baseline
+production parser and fails if page-unique content is missing from the derived Markdown,
+if a page's derived/reference size ratio collapses, or if the corpus lists fewer pages
+than the source tree holds. It needs the extracted HTML on disk (build with
+`--keep-source`) and covers the full corpus in a few seconds. The checked-in baseline
 ([docs/audit-baseline-6000.3.json](docs/audit-baseline-6000.3.json)) lists the 496
-individually triaged false positives (1.27% of pages, one known footer-adjacency class),
-so the audit gates on new flags only.
+individually triaged false positives (1.27% of pages, one known footer-adjacency class)
+with their accepted magnitudes pinned, so the audit gates on new flags and on any
+worsening of an accepted one. The audit is a strong regression detector, not a
+mathematical proof - it works at word-token granularity and has documented
+false-negative classes (shared boilerplate sentences, punctuation-only changes); the
+precise statement of what it does and does not prove is in
+[docs/DESIGN.md](docs/DESIGN.md).
 
 Why this matters for agents: documentation lookups happen inside a context window billed
 per token. This corpus does not claim better retrieval than indexing Unity's raw HTML -
 measured with the same ranker, recall matches to within one case in a thousand - and that
 parity is the point: you keep the
 recall while every page an agent actually reads shrinks by ~90%, and the search index
-shrinks ~10x (84 MB vs ~860 MB for the same recall over raw HTML). The transform is
+shrinks ~10x (86 MB vs ~860 MB for the same recall over raw HTML). The transform is
 deliberately lossy (tables flatten, code loses fencing), so every derived page records the
 source path and SHA-256 of the original it came from; when an answer hinges on one page's
 exact details, the untouched original is one local command away
@@ -104,7 +110,8 @@ bin/unity-doc-corpus fetch --version 6000.3
 longer on a cold file cache - the read stage is I/O-bound). After a successful build the
 extracted HTML is pruned again - the retained zip can rematerialize it at any time, and a
 later `build` does so automatically. Pass `--keep-source` to keep the extracted tree
-around (you want this when iterating on the transform itself):
+around (you want this when iterating on the transform itself, and the `audit` verb needs
+it on disk):
 
 ```
 bin/unity-doc-corpus build --source unity-docs --output unity-docs/_agent
@@ -116,9 +123,11 @@ bin/unity-doc-corpus build --source unity-docs --output unity-docs/_agent
 bin/unity-doc-corpus search "script execution order"
 ```
 
-Steady-state footprint after these steps is ~665 MB: the ~475 MB zip plus ~190 MB of
-derived corpus. Reading a page's original HTML never needs a full re-extract -
-`bin/unity-doc-corpus source Manual/ExecutionOrder.html` prints it straight from the zip.
+Steady-state footprint after these steps is ~665 MB of content: the ~475 MB zip plus
+~190 MB of derived corpus (the corpus occupies more on disk - ~300 MB on a typical NTFS
+volume - because 39k small files carry allocation overhead). Reading a page's original
+HTML never needs a full re-extract -
+`bin/unity-doc-corpus source Manual/execution-order.html` prints it straight from the zip.
 If even the zip is too much, delete it (or fetch with `--delete-zip`) for a ~190 MB
 footprint; everything keeps working except offline verification and offline rebuilds -
 originals are then a pinned online fetch of each page's frontmatter `canonical_url`, and a

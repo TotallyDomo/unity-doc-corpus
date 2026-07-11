@@ -27,8 +27,28 @@ package main
 // class - not a diverse spray - so the audit stays a reliable NEW-regression detector. The
 // --baseline allowlist (M0042-S0002) turns that floor into a clean CI gate: capture the accepted
 // flag set once with --write-baseline, then gate on new flags only - exit is zero iff every
-// content-loss flag's page is in the baseline, and stale baseline entries (pages that no longer
-// flag) are reported so the floor can only shrink visibly, never grow silently.
+// gating flag's page is covered by the baseline, and stale baseline entries (pages that no longer
+// flag) are reported so the floor can only shrink visibly, never grow silently. Baseline entries
+// pin each accepted page's flag MAGNITUDE (missing spans/shingles, derived token count) and the
+// corpus page count, so a baselined page that worsens re-gates and silent page loss re-gates
+// (M0042-S5; a legacy key-only baseline still loads, magnitude-unchecked, and asks to be
+// regenerated).
+//
+// What the gate does NOT prove - the documented false-negative classes, the mirror of the FP
+// candor above (blind E2E validation, 2026-07-12; see docs/DESIGN.md):
+//   - Corpus-common content: a shingle repeated on more than max-shingle-df pages (shared
+//     sentences like the hideFlags description, on 327 pages) is not page-unique, so a
+//     class-wide transform regression stripping it from every page passes the page-local
+//     check. Corpus-level detection is planned (M0042-S6).
+//   - Word-token granularity: tokens are letter/digit runs, so punctuation, operators, and
+//     signs are invisible ("return -1" vs "return 1" does not flag). "Lossless" here always
+//     means word-token-lossless.
+//   - Stream edges: a loss shorter than min-run at the very start or end of the visible-text
+//     stream can fall under the run bar; only INTERIOR single-token losses are guaranteed to
+//     clear it. In practice kept chrome usually borders real pages and rescues detection.
+//   - Duplicate-page families: near-identical pages push every shingle above max-shingle-df,
+//     so a blanked family member produces no page-unique missing run; the gating ratio floor
+//     (--ratio-gate-factor) is the backstop for that class.
 
 import (
 	"bufio"
@@ -49,6 +69,7 @@ type auditConfig struct {
 	maxDF       uint32
 	minRun      int
 	ratioFactor float64
+	ratioGate   float64
 	ratioMinTok int
 	maxQuotes   int
 }
@@ -72,7 +93,14 @@ type auditFlag struct {
 	MissingSpans  int      `json:"missing_span_count"`
 	Quotes        []string `json:"missing_text_samples"`
 	RatioOutlier  bool     `json:"ratio_outlier"`
+	RatioGated    bool     `json:"ratio_gated"`
 	Baselined     bool     `json:"baselined"`
+}
+
+// gates reports whether a flag participates in the exit gate: a missing-content run, or a
+// ratio collapse below the gating floor. Plain ratio outliers stay advisory.
+func (f *auditFlag) gates() bool {
+	return f.MissingSpans > 0 || f.RatioGated
 }
 
 // auditResult is one full-corpus audit pass, separated from reporting and exit-code policy so
@@ -127,8 +155,9 @@ func runAudit(args []string) {
 	workers := fs.Int("workers", 0, "Worker count. Defaults to half of logical CPUs.")
 	shingleN := fs.Int("shingle-n", 5, "Shingle width in words.")
 	maxDF := fs.Int("max-shingle-df", 4, "Max corpus document frequency for a shingle to count as page-unique content.")
-	minRun := fs.Int("min-run", 0, "Minimum run of consecutive missing page-unique shingles to flag a page; 0 = shingle width n. Tight by construction: a boundary between kept content and a stripped corpus-uniform chrome island produces exactly n-1 missing windows, so losing even one real content token (>= n missing windows) is the smallest thing that clears the bar.")
+	minRun := fs.Int("min-run", 0, "Minimum run of consecutive missing page-unique shingles to flag a page; 0 = shingle width n. Tight by construction: a boundary between kept content and a stripped corpus-uniform chrome island produces exactly n-1 missing windows, so losing even one INTERIOR content token (>= n missing windows) is the smallest thing that clears the bar; a loss shorter than the bar hard against the stream's start or end can fall under it.")
 	ratioFactor := fs.Float64("ratio-factor", 0.4, "Advisory ratio-outlier threshold: flag pages whose derived/reference token ratio is below section median times this.")
+	ratioGate := fs.Float64("ratio-gate-factor", 0.25, "Gating ratio-collapse threshold: a page whose derived/reference token ratio falls below section median times this counts as content loss and gates the exit (baseline-coverable). 0 disables.")
 	ratioMinTok := fs.Int("ratio-min-tokens", 30, "Skip ratio-outlier checks for pages with fewer reference tokens than this.")
 	maxQuotes := fs.Int("max-quotes", 5, "Max quoted missing-text spans to report per flagged page.")
 	baseline := fs.String("baseline", "", "Baseline allowlist JSON of accepted content-loss page keys. With it, exit is zero iff every content-loss flag is baselined; only NEW flags gate.")
@@ -139,8 +168,8 @@ func runAudit(args []string) {
 		fmt.Fprintln(os.Stderr, "error: --shingle-n must be >= 1")
 		os.Exit(2)
 	}
-	if *maxDF < 0 || *maxQuotes < 0 || *ratioFactor < 0 || *ratioMinTok < 0 || *minRun < 0 {
-		fmt.Fprintln(os.Stderr, "error: --max-shingle-df, --max-quotes, --ratio-factor, --ratio-min-tokens, and --min-run must not be negative")
+	if *maxDF < 0 || *maxQuotes < 0 || *ratioFactor < 0 || *ratioGate < 0 || *ratioMinTok < 0 || *minRun < 0 {
+		fmt.Fprintln(os.Stderr, "error: --max-shingle-df, --max-quotes, --ratio-factor, --ratio-gate-factor, --ratio-min-tokens, and --min-run must not be negative")
 		os.Exit(2)
 	}
 	cfg := auditConfig{
@@ -148,6 +177,7 @@ func runAudit(args []string) {
 		maxDF:       uint32(*maxDF),
 		minRun:      *minRun,
 		ratioFactor: *ratioFactor,
+		ratioGate:   *ratioGate,
 		ratioMinTok: *ratioMinTok,
 		maxQuotes:   *maxQuotes,
 	}
@@ -173,17 +203,18 @@ func runAudit(args []string) {
 		}
 	}
 	newFlags, stale := applyAuditBaseline(res.flagged, base)
+	shrunk := baselinePageShrink(base, len(res.pages))
 
-	printAuditReport(os.Stdout, res, base, newFlags, stale, cfg)
+	printAuditReport(os.Stdout, res, base, newFlags, stale, shrunk, cfg)
 	if *output != "" {
-		if err := writeAuditJSON(*output, res, base, newFlags, stale, cfg); err != nil {
+		if err := writeAuditJSON(*output, res, base, newFlags, stale, shrunk, cfg); err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
 		fmt.Fprintln(os.Stderr, "Wrote JSON report:", *output)
 	}
 	if *writeBaseline != "" {
-		if err := writeAuditBaseline(*writeBaseline, res.flagged); err != nil {
+		if err := writeAuditBaseline(*writeBaseline, res); err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
@@ -191,8 +222,9 @@ func runAudit(args []string) {
 		// Writing a baseline IS the acceptance of the current flag set: exit zero.
 		return
 	}
-	// Only content-loss flags outside the baseline gate the exit; ratio outliers are advisory.
-	if newFlags > 0 {
+	// Gating flags outside the baseline (or a shrunken page count) fail the run; plain ratio
+	// outliers are advisory.
+	if newFlags > 0 || shrunk > 0 {
 		os.Exit(1)
 	}
 }
@@ -215,6 +247,19 @@ func auditCorpus(source, corpus string, workers int, cfg auditConfig) (*auditRes
 	}
 	if len(pages) == 0 {
 		return nil, fmt.Errorf("no pages found in %s (is the corpus built?)", filepath.Join(corpusAbs, "pages.jsonl"))
+	}
+
+	// Whole-page-loss gate: the builder derives one corpus page per source HTML file, so the
+	// counts must match exactly. A mismatch means either a build-discovery regression silently
+	// dropped pages or this source tree is not the one the corpus was built from - both make
+	// the audit's per-page verdicts meaningless, so refuse instead of certifying.
+	htmlCount, err := countSectionHTML(sourceAbs)
+	if err != nil {
+		return nil, err
+	}
+	if htmlCount != len(pages) {
+		return nil, fmt.Errorf("corpus lists %d pages but %s holds %d source HTML files - a build regression dropped pages, or source and corpus are from different doc versions; rebuild with:\n  bin/unity-doc-corpus build --source %s --output %s --keep-source",
+			len(pages), sourceAbs, htmlCount, source, corpus)
 	}
 
 	// Pass 1: extract reference visible text for every page, cache it, and fold each page's
@@ -255,6 +300,7 @@ func auditCorpus(source, corpus string, workers int, cfg auditConfig) (*auditRes
 	flags := make([]*auditFlag, len(pages))
 	ratios := make([]float64, len(pages))
 	refTokCounts := make([]int, len(pages))
+	mdTokCounts := make([]int, len(pages))
 	if err := auditParallel(workers, len(pages), func(i int) error {
 		mdPath := filepath.Join(corpusAbs, filepath.FromSlash(pages[i].MDRel))
 		mdRaw, err := os.ReadFile(mdPath)
@@ -267,6 +313,7 @@ func auditCorpus(source, corpus string, workers int, cfg auditConfig) (*auditRes
 		mdTokens := auditTokenize(string(mdRaw))
 		refTokens := auditTokenize(refJoined[i])
 		refTokCounts[i] = len(refTokens)
+		mdTokCounts[i] = len(mdTokens)
 		if len(refTokens) > 0 {
 			ratios[i] = float64(len(mdTokens)) / float64(len(refTokens))
 		}
@@ -283,20 +330,21 @@ func auditCorpus(source, corpus string, workers int, cfg auditConfig) (*auditRes
 		return nil, err
 	}
 
-	// Advisory ratio-outlier pass: per-section median, flag pages far below it.
-	markRatioOutliers(pages, ratios, refTokCounts, flags, cfg)
+	// Ratio pass: per-section median; advisory outliers plus the gating collapse tier.
+	markRatioOutliers(pages, ratios, refTokCounts, mdTokCounts, flags, cfg)
 
-	// Collect flagged pages (content-loss runs) in stable page order.
+	// Collect flagged pages (content-loss runs, ratio collapses, advisory outliers) in stable
+	// page order.
 	var flagged []*auditFlag
 	for _, f := range flags {
-		if f != nil && (f.MissingSpans > 0 || f.RatioOutlier) {
+		if f != nil && (f.MissingSpans > 0 || f.RatioOutlier || f.RatioGated) {
 			flagged = append(flagged, f)
 		}
 	}
 	contentLoss := 0
 	ratioOnly := 0
 	for _, f := range flagged {
-		if f.MissingSpans > 0 {
+		if f.gates() {
 			contentLoss++
 		} else {
 			ratioOnly++
@@ -316,12 +364,36 @@ func auditCorpus(source, corpus string, workers int, cfg auditConfig) (*auditRes
 // auditBaselineDescription is written into every baseline file so the file explains itself.
 const auditBaselineDescription = "Accepted content-loss flags for the unity-doc-corpus audit " +
 	"(known false-positive classes, triaged per the M0042 spec). audit --baseline exits zero " +
-	"iff every content-loss flag's page_key is listed here; regenerate with --write-baseline " +
-	"only after a human triages the change."
+	"iff every gating flag is covered by an entry AT OR BELOW its recorded magnitude and the " +
+	"corpus page count has not shrunk below page_count; a covered page that worsens re-gates. " +
+	"Regenerate with --write-baseline only after a human triages the change."
+
+// auditBaselineEntry pins one accepted page's flag magnitude. A flag is covered only while
+// it is no worse than recorded: no more missing spans/shingles, no fewer derived tokens.
+type auditBaselineEntry struct {
+	PageKey         string `json:"page_key"`
+	MissingSpans    int    `json:"missing_spans"`
+	MissingShingles int    `json:"missing_shingles"`
+	MDTokens        int    `json:"md_tokens"`
+}
 
 type auditBaseline struct {
-	Description string   `json:"description"`
-	PageKeys    []string `json:"page_keys"`
+	Description string               `json:"description"`
+	PageCount   int                  `json:"page_count,omitempty"`
+	Pages       []auditBaselineEntry `json:"pages,omitempty"`
+	// PageKeys is the legacy v1 format: bare keys, no magnitude. Still honored (a listed page
+	// is covered at ANY magnitude) so old baselines keep working, but reported as legacy so
+	// they get regenerated.
+	PageKeys []string `json:"page_keys,omitempty"`
+}
+
+func (b *auditBaseline) legacy() bool { return len(b.PageKeys) > 0 && len(b.Pages) == 0 }
+
+func (b *auditBaseline) entryCount() int {
+	if b.legacy() {
+		return len(b.PageKeys)
+	}
+	return len(b.Pages)
 }
 
 func loadAuditBaseline(path string) (*auditBaseline, error) {
@@ -336,51 +408,104 @@ func loadAuditBaseline(path string) (*auditBaseline, error) {
 	return &b, nil
 }
 
-// writeAuditBaseline captures the run's content-loss page keys, sorted for a stable diff.
-func writeAuditBaseline(path string, flagged []*auditFlag) error {
-	keys := make([]string, 0, len(flagged))
-	for _, f := range flagged {
-		if f.MissingSpans > 0 {
-			keys = append(keys, f.PageKey)
+// writeAuditBaseline captures the run's gating flags with their magnitudes plus the corpus
+// page count, sorted for a stable diff.
+func writeAuditBaseline(path string, res *auditResult) error {
+	entries := make([]auditBaselineEntry, 0, len(res.flagged))
+	for _, f := range res.flagged {
+		if f.gates() {
+			entries = append(entries, auditBaselineEntry{
+				PageKey:         f.PageKey,
+				MissingSpans:    f.MissingSpans,
+				MissingShingles: f.MissingWindow,
+				MDTokens:        f.MDTokens,
+			})
 		}
 	}
-	sort.Strings(keys)
-	data, err := json.MarshalIndent(auditBaseline{Description: auditBaselineDescription, PageKeys: keys}, "", "  ")
+	sort.Slice(entries, func(i, j int) bool { return entries[i].PageKey < entries[j].PageKey })
+	b := auditBaseline{Description: auditBaselineDescription, PageCount: len(res.pages), Pages: entries}
+	data, err := json.MarshalIndent(b, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(path, append(data, '\n'), 0644)
 }
 
-// applyAuditBaseline marks content-loss flags listed in the baseline, returning the count of
-// NEW (unbaselined) content-loss flags and of stale baseline entries (listed pages that no
-// longer flag; drop them from the file on the next triaged --write-baseline). A nil baseline
-// leaves every content-loss flag new.
+// applyAuditBaseline marks gating flags covered by the baseline, returning the count of NEW
+// gating flags (unlisted pages OR listed pages that worsened beyond their recorded magnitude)
+// and of stale baseline entries (listed pages that no longer flag; drop them from the file on
+// the next triaged --write-baseline). A nil baseline leaves every gating flag new.
 func applyAuditBaseline(flagged []*auditFlag, base *auditBaseline) (newFlags, stale int) {
-	known := map[string]bool{}
+	entries := map[string]auditBaselineEntry{}
+	legacyKeys := map[string]bool{}
 	if base != nil {
-		for _, k := range base.PageKeys {
-			known[k] = true
+		for _, e := range base.Pages {
+			entries[e.PageKey] = e
 		}
+		for _, k := range base.PageKeys {
+			legacyKeys[k] = true
+		}
+	}
+	covered := func(f *auditFlag) bool {
+		if e, ok := entries[f.PageKey]; ok {
+			return f.MissingSpans <= e.MissingSpans && f.MissingWindow <= e.MissingShingles && f.MDTokens >= e.MDTokens
+		}
+		return legacyKeys[f.PageKey] // legacy entries carry no magnitude to hold against
 	}
 	seen := map[string]bool{}
 	for _, f := range flagged {
-		if f.MissingSpans == 0 {
+		if !f.gates() {
 			continue
 		}
-		if known[f.PageKey] {
+		if covered(f) {
 			f.Baselined = true
-			seen[f.PageKey] = true
 		} else {
 			newFlags++
 		}
+		seen[f.PageKey] = true // a worsened listed page is not stale, just uncovered
 	}
-	for k := range known {
+	for k := range entries {
+		if !seen[k] {
+			stale++
+		}
+	}
+	for k := range legacyKeys {
 		if !seen[k] {
 			stale++
 		}
 	}
 	return newFlags, stale
+}
+
+// baselinePageShrink returns how many pages the corpus lost against the baseline's recorded
+// page count (0 when no baseline, no recorded count, or growth - growth means a new docs
+// version and shows up as ordinary new/stale churn instead).
+func baselinePageShrink(base *auditBaseline, pageCount int) int {
+	if base == nil || base.PageCount == 0 || pageCount >= base.PageCount {
+		return 0
+	}
+	return base.PageCount - pageCount
+}
+
+// countSectionHTML counts the source HTML files under the section trees with an independent
+// walk - deliberately not the builder's collectHTML, mirroring the extractor's independence.
+func countSectionHTML(sourceAbs string) (int, error) {
+	count := 0
+	for _, section := range sectionDirs {
+		err := filepath.WalkDir(filepath.Join(sourceAbs, section), func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if !d.IsDir() && strings.EqualFold(filepath.Ext(path), ".html") {
+				count++
+			}
+			return nil
+		})
+		if err != nil {
+			return 0, err
+		}
+	}
+	return count, nil
 }
 
 // auditPage checks one page and returns a flag if it has a qualifying run of missing
@@ -453,9 +578,10 @@ func auditPage(p pageRef, refTokens, mdTokens []string, df *dfCounter, cfg audit
 }
 
 // markRatioOutliers computes the per-section median derived/reference token ratio and flags
-// pages that fall well below it. Advisory only: it annotates existing flags or creates a
-// ratio-only flag, but never contributes to the content-loss exit code.
-func markRatioOutliers(pages []pageRef, ratios []float64, refTok []int, flags []*auditFlag, cfg auditConfig) {
+// pages that fall well below it. Two tiers: below median*ratioFactor is an advisory outlier;
+// below median*ratioGate is a gating ratio collapse (the backstop for losses the shingle
+// invariant cannot see, e.g. a blanked page in a duplicate family).
+func markRatioOutliers(pages []pageRef, ratios []float64, refTok, mdTok []int, flags []*auditFlag, cfg auditConfig) {
 	bySection := map[string][]float64{}
 	for i := range pages {
 		if refTok[i] >= cfg.ratioMinTok {
@@ -474,15 +600,17 @@ func markRatioOutliers(pages []pageRef, ratios []float64, refTok []int, flags []
 		if !ok || med == 0 {
 			continue
 		}
-		if ratios[i] < med*cfg.ratioFactor {
+		gated := cfg.ratioGate > 0 && ratios[i] < med*cfg.ratioGate
+		if ratios[i] < med*cfg.ratioFactor || gated {
 			if flags[i] == nil {
 				flags[i] = &auditFlag{
 					PageKey: pages[i].PageKey, Section: pages[i].Section,
 					SourceRel: pages[i].SourceRel, MDRel: pages[i].MDRel,
-					RefTokens: refTok[i], Ratio: ratios[i],
+					RefTokens: refTok[i], MDTokens: mdTok[i], Ratio: ratios[i],
 				}
 			}
 			flags[i].RatioOutlier = true
+			flags[i].RatioGated = gated
 		}
 	}
 }
@@ -546,15 +674,25 @@ func loadPageRefs(corpusAbs string) ([]pageRef, error) {
 	scanner := bufio.NewScanner(f)
 	buf := make([]byte, 1024*1024)
 	scanner.Buffer(buf, 16*1024*1024)
+	line := 0
 	for scanner.Scan() {
+		line++
+		if len(strings.TrimSpace(string(scanner.Bytes()))) == 0 {
+			continue
+		}
 		var rec struct {
 			PageKey   string `json:"page_key"`
 			Section   string `json:"section"`
 			SourceRel string `json:"source_rel"`
 			MDRel     string `json:"md_rel"`
 		}
-		if json.Unmarshal(scanner.Bytes(), &rec) != nil || rec.SourceRel == "" || rec.MDRel == "" {
-			continue
+		// A malformed or field-less record is corpus corruption, not noise to skip: silently
+		// dropping it would shrink the audited page set - the same class as silent page loss.
+		if err := json.Unmarshal(scanner.Bytes(), &rec); err != nil {
+			return nil, fmt.Errorf("%s line %d: malformed page record (%v) - rebuild the corpus", path, line, err)
+		}
+		if rec.SourceRel == "" || rec.MDRel == "" {
+			return nil, fmt.Errorf("%s line %d: page record missing source_rel/md_rel - rebuild the corpus", path, line)
 		}
 		pages = append(pages, pageRef{PageKey: rec.PageKey, Section: rec.Section, SourceRel: rec.SourceRel, MDRel: rec.MDRel})
 	}
@@ -594,15 +732,22 @@ func auditParallel(workers, count int, fn func(i int) error) error {
 	return firstErr
 }
 
-func printAuditReport(w *os.File, res *auditResult, base *auditBaseline, newFlags, stale int, cfg auditConfig) {
-	fmt.Fprintf(w, "Content-lossless audit: %d pages, %d content-loss flags, %d ratio-only outliers (%.1fs)\n",
+func printAuditReport(w *os.File, res *auditResult, base *auditBaseline, newFlags, stale, shrunk int, cfg auditConfig) {
+	fmt.Fprintf(w, "Content-lossless audit: %d pages, %d gating flags, %d advisory ratio outliers (%.1fs)\n",
 		len(res.pages), res.contentLoss, res.ratioOnly, res.elapsed.Seconds())
-	fmt.Fprintf(w, "Config: shingle-n=%d max-shingle-df=%d min-run=%d ratio-factor=%.2f\n",
-		cfg.shingleN, cfg.maxDF, cfg.minRun, cfg.ratioFactor)
+	fmt.Fprintf(w, "Config: shingle-n=%d max-shingle-df=%d min-run=%d ratio-factor=%.2f ratio-gate-factor=%.2f\n",
+		cfg.shingleN, cfg.maxDF, cfg.minRun, cfg.ratioFactor, cfg.ratioGate)
 	fmt.Fprintf(w, "Chrome dropped (ref tokens): %s\n", formatSkipped(res.skipped))
 	if base != nil {
 		fmt.Fprintf(w, "Baseline: %d baselined (known exceptions), %d new, %d stale baseline entries\n",
 			res.contentLoss-newFlags, newFlags, stale)
+		if base.legacy() {
+			fmt.Fprintln(w, "Baseline is legacy v1 (bare page keys, no magnitudes or page count) - regenerate with --write-baseline to pin them")
+		}
+		if shrunk > 0 {
+			fmt.Fprintf(w, "PAGE COUNT SHRANK: corpus has %d pages, baseline recorded %d (%d lost) - gating\n",
+				len(res.pages), base.PageCount, shrunk)
+		}
 	}
 	fmt.Fprintln(w)
 	if len(res.flagged) == 0 {
@@ -618,6 +763,9 @@ func printAuditReport(w *os.File, res *auditResult, base *auditBaseline, newFlag
 		kind := "content-loss"
 		if f.MissingSpans == 0 {
 			kind = "ratio-outlier"
+			if f.RatioGated {
+				kind = "ratio-collapse"
+			}
 		}
 		fmt.Fprintf(w, "[%s] %s\n  source: %s\n  md:     %s\n", kind, f.PageKey, f.SourceRel, f.MDRel)
 		fmt.Fprintf(w, "  ref_tokens=%d md_tokens=%d ratio=%.3f", f.RefTokens, f.MDTokens, f.Ratio)
@@ -638,18 +786,19 @@ func printAuditReport(w *os.File, res *auditResult, base *auditBaseline, newFlag
 	}
 }
 
-func writeAuditJSON(path string, res *auditResult, base *auditBaseline, newFlags, stale int, cfg auditConfig) error {
+func writeAuditJSON(path string, res *auditResult, base *auditBaseline, newFlags, stale, shrunk int, cfg auditConfig) error {
 	report := map[string]any{
 		"page_count":              len(res.pages),
 		"content_loss_flag_count": res.contentLoss,
 		"ratio_outlier_count":     res.ratioOnly,
 		"skipped_chrome_tokens":   res.skipped,
 		"config": map[string]any{
-			"shingle_n":        cfg.shingleN,
-			"max_shingle_df":   cfg.maxDF,
-			"min_run":          cfg.minRun,
-			"ratio_factor":     cfg.ratioFactor,
-			"ratio_min_tokens": cfg.ratioMinTok,
+			"shingle_n":         cfg.shingleN,
+			"max_shingle_df":    cfg.maxDF,
+			"min_run":           cfg.minRun,
+			"ratio_factor":      cfg.ratioFactor,
+			"ratio_gate_factor": cfg.ratioGate,
+			"ratio_min_tokens":  cfg.ratioMinTok,
 		},
 		"elapsed_seconds": res.elapsed.Seconds(),
 		"flagged":         res.flagged,
@@ -658,6 +807,7 @@ func writeAuditJSON(path string, res *auditResult, base *auditBaseline, newFlags
 		report["baselined_flag_count"] = res.contentLoss - newFlags
 		report["new_content_loss_flag_count"] = newFlags
 		report["stale_baseline_count"] = stale
+		report["baseline_page_shrink"] = shrunk
 	}
 	if res.flagged == nil {
 		report["flagged"] = []*auditFlag{}

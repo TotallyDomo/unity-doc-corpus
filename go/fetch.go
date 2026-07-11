@@ -43,8 +43,17 @@ var pinnedDocHosts = map[string]bool{
 var httpClient = &http.Client{
 	Timeout: 30 * time.Minute,
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if req.URL.Scheme != "https" {
+			return fmt.Errorf("redirect off https refused: %s", req.URL)
+		}
 		if !pinnedDocHosts[req.URL.Hostname()] {
 			return fmt.Errorf("redirect to unpinned host refused: %s", req.URL)
+		}
+		// storage.googleapis.com is a shared multi-tenant host: pin the docscloudstorage
+		// bucket, not just the host, so a hop cannot land in an arbitrary GCS bucket. The
+		// unity3d.com hosts are Unity's own; the host pin is the control there.
+		if req.URL.Hostname() == "storage.googleapis.com" && !strings.HasPrefix(req.URL.EscapedPath(), "/docscloudstorage/") {
+			return fmt.Errorf("redirect outside the docscloudstorage bucket refused: %s", req.URL)
 		}
 		return nil
 	},
