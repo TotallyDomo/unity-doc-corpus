@@ -41,6 +41,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 type auditConfig struct {
@@ -138,6 +139,10 @@ func runAudit(args []string) {
 		fmt.Fprintln(os.Stderr, "error: --shingle-n must be >= 1")
 		os.Exit(2)
 	}
+	if *maxDF < 0 || *maxQuotes < 0 || *ratioFactor < 0 || *ratioMinTok < 0 || *minRun < 0 {
+		fmt.Fprintln(os.Stderr, "error: --max-shingle-df, --max-quotes, --ratio-factor, --ratio-min-tokens, and --min-run must not be negative")
+		os.Exit(2)
+	}
 	cfg := auditConfig{
 		shingleN:    *shingleN,
 		maxDF:       uint32(*maxDF),
@@ -222,6 +227,10 @@ func auditCorpus(source, corpus string, workers int, cfg auditConfig) (*auditRes
 		htmlPath := filepath.Join(sourceAbs, filepath.FromSlash(pages[i].SourceRel))
 		raw, err := os.ReadFile(htmlPath)
 		if err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("missing source page %s\nthe audit reads the original HTML - rematerialize it with:\n  bin/unity-doc-corpus build --source %s --output %s --keep-source",
+					htmlPath, source, corpus)
+			}
 			return fmt.Errorf("reading %s: %w", htmlPath, err)
 		}
 		tokens, skipped := auditExtractTokens(string(raw))
@@ -250,6 +259,9 @@ func auditCorpus(source, corpus string, workers int, cfg auditConfig) (*auditRes
 		mdPath := filepath.Join(corpusAbs, filepath.FromSlash(pages[i].MDRel))
 		mdRaw, err := os.ReadFile(mdPath)
 		if err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("missing derived page %s (corpus incomplete - rebuild with: bin/unity-doc-corpus build --source %s --output %s)", mdPath, source, corpus)
+			}
 			return fmt.Errorf("reading %s: %w", mdPath, err)
 		}
 		mdTokens := auditTokenize(string(mdRaw))
@@ -402,7 +414,9 @@ func auditPage(p pageRef, refTokens, mdTokens []string, df *dfCounter, cfg audit
 	runLen := 0
 	closeRun := func(endWindow int) {
 		if runStart >= 0 && runLen >= cfg.minRun {
-			spans = append(spans, [2]int{runStart, endWindow + cfg.shingleN - 1})
+			// The final missing window covers tokens [endWindow, endWindow+n-1], so the
+			// exclusive span end is endWindow + n.
+			spans = append(spans, [2]int{runStart, endWindow + cfg.shingleN})
 		}
 		runStart = -1
 		runLen = 0
@@ -425,7 +439,7 @@ func auditPage(p pageRef, refTokens, mdTokens []string, df *dfCounter, cfg audit
 	if len(spans) == 0 {
 		return nil
 	}
-	quotes := make([]string, 0, cfg.maxQuotes)
+	quotes := make([]string, 0, max(cfg.maxQuotes, 0))
 	for _, s := range spans {
 		if len(quotes) >= cfg.maxQuotes {
 			break
@@ -503,19 +517,28 @@ func formatSkipped(skipped map[string]int) string {
 	return strings.Join(parts, " ")
 }
 
-// clip trims a quoted span to a readable length.
+// clip trims a quoted span to a readable length, backing up to a rune boundary so a
+// multi-byte character is never cut in half.
 func clip(s string) string {
-	const max = 200
-	if len(s) <= max {
+	const limit = 200
+	if len(s) <= limit {
 		return s
 	}
-	return s[:max] + "..."
+	cut := limit
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "..."
 }
 
 // loadPageRefs reads the corpus pages.jsonl into the page list the audit iterates.
 func loadPageRefs(corpusAbs string) ([]pageRef, error) {
-	f, err := os.Open(filepath.Join(corpusAbs, "pages.jsonl"))
+	path := filepath.Join(corpusAbs, "pages.jsonl")
+	f, err := os.Open(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("%s not found (is the corpus built? run: bin/unity-doc-corpus build --source <docs-root> --output %s)", path, corpusAbs)
+		}
 		return nil, err
 	}
 	defer f.Close()
@@ -541,6 +564,9 @@ func loadPageRefs(corpusAbs string) ([]pageRef, error) {
 // auditParallel runs fn over indices [0,count) on a fixed worker pool, returning the first
 // error any worker reports.
 func auditParallel(workers, count int, fn func(i int) error) error {
+	if workers < 1 {
+		workers = 1 // a non-positive count would leave the job feed blocking forever
+	}
 	jobs := make(chan int)
 	var wg sync.WaitGroup
 	var mu sync.Mutex

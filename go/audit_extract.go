@@ -156,6 +156,14 @@ func auditExtractScoped(page string, requireContentWrap bool) ([]string, map[str
 			if !collecting {
 				continue
 			}
+			// A close tag for a void element never had a matching open subtree, so it must
+			// not decrement the depth. Real pages have these: every ScriptReference page's
+			// feedback form emits <input ...></input> pairs inside #content-wrap, and an
+			// unbalanced decrement here ended collection early - silently blinding the audit
+			// to everything after the form.
+			if auditVoidElements[name] {
+				continue
+			}
 			if len(skipStack) > 0 && skipStack[len(skipStack)-1].level == cd {
 				skipStack = skipStack[:len(skipStack)-1]
 			}
