@@ -14,7 +14,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  unity-doc-corpus build  --source <docs-root> --output <agent-output> [--workers N] [--keep-source]")
 	fmt.Fprintln(os.Stderr, "  unity-doc-corpus search [--corpus <agent-output>] [--limit N] <query>")
 	fmt.Fprintln(os.Stderr, "  unity-doc-corpus source [--source <docs-root>] <source_rel>")
-	fmt.Fprintln(os.Stderr, "  unity-doc-corpus audit  [--source <docs-root>] [--corpus <agent-output>] [--output report.json] [--workers N]")
+	fmt.Fprintln(os.Stderr, "  unity-doc-corpus audit  [--source <docs-root>] [--corpus <agent-output>] [--output report.json] [--baseline base.json] [--write-baseline base.json] [--workers N]")
 }
 
 func main() {
