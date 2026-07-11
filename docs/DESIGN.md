@@ -103,7 +103,22 @@ This is the lossy step, and it is deliberately biased toward recall of *text*: t
 flatten, code blocks lose fencing, inline markup disappears. The bet is that an agent
 searching and skimming needs the words and the structure landmarks (headings, links),
 and anything load-bearing gets verified against the original anyway (see below).
-The result is a 90.5% byte reduction (648 MB -> 61 MB for Unity 6000.3).
+The result is a 90.5% byte reduction (648 MB -> 62 MB for Unity 6000.3).
+
+Lossy in structure must still be lossless in content, and that invariant is audited, not
+trusted: the `audit` verb
+(`bin/unity-doc-corpus audit --source unity-docs --corpus unity-docs/_agent --baseline docs/audit-baseline-6000.3.json`,
+run after every transform change) re-extracts every page's visible text with an
+independent extractor that shares no code with the production parser, shingles it, and
+flags a page when a run of page-unique shingles is missing from its derived Markdown,
+with a byte-ratio outlier tier as a gross-truncation backstop. It requires the extracted
+HTML tree (`build --keep-source`), covers the full corpus in seconds, and gates on a
+checked-in baseline of individually triaged false positives
+([audit-baseline-6000.3.json](audit-baseline-6000.3.json) - 496 pages, one known
+footer-adjacency class), so only new flags fail a run. The guard exists because the
+invariant silently failed once: a parser depth-tracking bug (fixed 2026-07-09) truncated
+entire sections while the unit tests, the recall benchmark, and the opt-in per-page
+verify step all stayed green.
 
 ### Corpus format
 
@@ -170,9 +185,9 @@ recall count exactly):
 | Lane | Top-10 recall (all) | Manual pages only | Mean query time |
 | --- | --- | --- | --- |
 | Raw HTML, naive scan | 945/1008 (93.8%) | 55/93 (59.1%) | ~207 ms |
-| Derived Markdown, naive scan | 968/1008 (96.0%) | 66/93 (71.0%) | ~46 ms |
-| FTS5 bm25 over raw HTML | 977/1008 (96.9%) | 89/93 (95.7%) | ~3.6 ms |
-| FTS5 bm25 over the corpus (shipped) | 976/1008 (96.8%) | 88/93 (94.6%) | ~3.0 ms |
+| Derived Markdown, naive scan | 958/1008 (95.0%) | 58/93 (62.4%) | ~42 ms |
+| FTS5 bm25 over raw HTML | 977/1008 (96.9%) | 89/93 (95.7%) | ~3.5 ms |
+| FTS5 bm25 over the corpus (shipped) | 976/1008 (96.8%) | 89/93 (95.7%) | ~4.2 ms |
 
 The four lanes form a ranker x representation matrix, and reading it honestly:
 
@@ -184,19 +199,19 @@ The four lanes form a ranker x representation matrix, and reading it honestly:
 - **Where ranking matters is concept pages.** On ScriptReference cases every lane
   saturates - an API page's own name is a near-unique string, so even a naive scan finds
   it. Manual concept pages, whose titles are ordinary prose, are where naive scanning
-  collapses (59-71%) and bm25 holds (~95%).
+  collapses (59-62%) and bm25 holds (~95%).
 - **The title weighting is measured, not aesthetic.** Unweighted bm25 buries short
   canonical pages under their member pages (the class page for a bare class-name query);
   the 10:1 title:body weighting is worth +0.6 points overall and turned the benchmark's
   longest-standing curated miss (`script execution order`) into a #1 hit. The
   `search_index.tsv` exact-name lane still answers bare API names without the database.
-- **Speed separates FTS from scanning, not the FTS lanes from each other** (~3 ms either
+- **Speed separates FTS from scanning, not the FTS lanes from each other** (~4 ms either
   way once an index exists; a naive scan pays ~207 ms per query against raw HTML).
 
 **Honest limits.** Generated cases use page titles as queries - self-retrieval by a
 page's own name - which favors every lane and makes API-name cases outright easy; real
 agent queries are messier. The 8 curated agent-style cases hint at that messier picture
-(naive raw-HTML scan 5/8, shipped FTS5 6/8, raw-HTML FTS5 7/8 - at n=8 this is anecdote,
+(naive raw-HTML scan 5/8, shipped FTS5 7/8, raw-HTML FTS5 7/8 - at n=8 this is anecdote,
 not measurement). Recall@10 says nothing about precision or answer quality. The shipped
 FTS5 lane is only one lane of the actual lookup path: the skills route exact API names
 through `search_index.tsv` first, which covers bm25's characteristic miss (bare class

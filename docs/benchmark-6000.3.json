@@ -3,8 +3,8 @@
   "corpus": "unity-docs/_agent",
   "default_case_count": 8,
   "derived_file_count": 39056,
-  "derived_markdown_bytes": 61491683,
-  "derived_to_source_ratio": 0.09483401398819095,
+  "derived_markdown_bytes": 61753445,
+  "derived_to_source_ratio": 0.0952377099021502,
   "derived_top10_recall_count": 958,
   "generated_case_count": 1000,
   "miss_samples": [
@@ -183,22 +183,22 @@
       "derived_top10_recall_count": 900,
       "raw_fts_top10_recall_count": 888,
       "source_top10_recall_count": 890,
-      "sqlite_top10_recall_count": 888
+      "sqlite_top10_recall_count": 887
     }
   },
   "source": "unity-docs",
   "source_file_count": 39056,
   "source_html_bytes": 648413796,
   "source_top10_recall_count": 945,
-  "sqlite_top10_recall_count": 977,
+  "sqlite_top10_recall_count": 976,
   "timings_ms": {
-    "derived_search_total": 42079.651,
-    "load": 10133.311,
-    "raw_fts_index_build": 16026.024,
-    "raw_fts_search_total": 3732.787,
-    "source_search_total": 211104.076,
-    "sqlite_search_total": 2723.061,
-    "total": 59058.536
+    "derived_search_total": 41881.193,
+    "load": 9582.93,
+    "raw_fts_index_build": 15909.105,
+    "raw_fts_search_total": 3517.335,
+    "source_search_total": 208307.138,
+    "sqlite_search_total": 4201.87,
+    "total": 58178.945
   },
   "worker_count": 8
 }

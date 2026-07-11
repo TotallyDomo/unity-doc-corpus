@@ -66,9 +66,18 @@ extracted tree or straight out of the retained zip - keep at least the zip.
 
 ## Maintenance (builder changes)
 
-All three comparisons below read the extracted HTML (`--source unity-docs`), so build with
+The checks below read the extracted HTML (`--source unity-docs`), so build with
 `--keep-source` first when the tree was pruned.
 
+- Content-lossless audit - run after every transform change; it is the guard proving the
+  derived Markdown lost no page-unique content (an independent re-extraction of every
+  page's visible text, sharing no code with the production parser):
+  `bin/unity-doc-corpus audit --source unity-docs --corpus unity-docs/_agent --baseline docs/audit-baseline-6000.3.json`
+  Exit is nonzero only on content-loss flags not in the baseline allowlist (i.e. a new
+  transform regression); stale baseline entries are reported but do not fail the run.
+  After triaging new flags, regenerate the allowlist with
+  `--write-baseline docs/audit-baseline-6000.3.json` - writing it is explicit acceptance
+  of the current flag set. `--output report.json` saves the full JSON report.
 - Compare two corpora after changing the builder:
   `python scripts/compare_corpus.py --source unity-docs --baseline .cache/corpus-baseline --candidate unity-docs/_agent`
 - Recall/efficiency benchmark against the original HTML:

@@ -18,11 +18,11 @@ below):
 | --- | --- |
 | Pages transformed (Manual + ScriptReference) | 39,056 |
 | Source HTML | 648 MB |
-| Derived Markdown | 61 MB (9.5% of source bytes) |
+| Derived Markdown | 62 MB (9.5% of source bytes) |
 | Full corpus build | ~45 s right after fetch (8 workers); I/O-bound, budget 2-3x on a cold file cache |
-| Top-10 recall, corpus FTS5 (title-weighted bm25) | 96.9% (977/1008 cases; 95.7% on Manual concept pages) |
+| Top-10 recall, corpus FTS5 (title-weighted bm25) | 96.8% (976/1008 cases; 95.7% on Manual concept pages) |
 | Top-10 recall, same bm25 over the raw HTML | 96.9% (977/1008) - recall parity with the corpus lane |
-| Top-10 recall, naive ranked scan of the raw HTML (grep-style) | 93.8% (945/1008; 59.1% on Manual concept pages), ~77x slower (~209 ms vs ~2.7 ms per query) |
+| Top-10 recall, naive ranked scan of the raw HTML (grep-style) | 93.8% (945/1008; 59.1% on Manual concept pages), ~50x slower (~207 ms vs ~4.2 ms per query) |
 
 Benchmark cases are 8 curated lookups plus 1000 generated from page titles and page ids,
 sampled evenly across the whole corpus so the mix matches its ~91% ScriptReference / ~9%
@@ -30,16 +30,28 @@ Manual composition; a case counts as recalled when the expected page appears in 
 results. Reproduce with
 `bin/unity-doc-corpus-benchmark --source unity-docs --corpus unity-docs/_agent --generated-cases 1000`.
 
+Retrieval is only half the guarantee - the other half is that the transform lost no
+content. That is checked mechanically, not assumed: after every transform change,
+`bin/unity-doc-corpus audit --source unity-docs --corpus unity-docs/_agent --baseline docs/audit-baseline-6000.3.json`
+re-extracts every page's visible text with an extractor that shares no code with the
+production parser and fails if page-unique content is missing from the derived Markdown.
+It needs the extracted HTML on disk (build with `--keep-source`) and covers the full
+corpus in a few seconds. The checked-in baseline
+([docs/audit-baseline-6000.3.json](docs/audit-baseline-6000.3.json)) lists the 496
+individually triaged false positives (1.27% of pages, one known footer-adjacency class),
+so the audit gates on new flags only.
+
 Why this matters for agents: documentation lookups happen inside a context window billed
 per token. This corpus does not claim better retrieval than indexing Unity's raw HTML -
-measured with the same ranker, recall is equal - and that parity is the point: you keep the
+measured with the same ranker, recall matches to within one case in a thousand - and that
+parity is the point: you keep the
 recall while every page an agent actually reads shrinks by ~90%, and the search index
 shrinks ~10x (84 MB vs ~860 MB for the same recall over raw HTML). The transform is
 deliberately lossy (tables flatten, code loses fencing), so every derived page records the
 source path and SHA-256 of the original it came from; when an answer hinges on one page's
 exact details, the untouched original is one local command away
 (`bin/unity-doc-corpus source <source_rel>`). That is insurance against transform bugs,
-not a routine second read.
+not a routine second read - the corpus-wide audit above is what keeps it that way.
 
 ## How it works
 
