@@ -36,7 +36,7 @@ results. Reproduce with
 
 Retrieval is only half the guarantee - the other half is that the transform loses no
 page text. That is checked mechanically, not assumed: after every transform change,
-`bin/unity-doc-corpus audit --source unity-docs --corpus unity-docs/_agent --baseline docs/audit-baseline-6000.3.json`
+`bin/unity-doc-corpus audit --source unity-docs --corpus unity-docs/_agent --baseline docs/audit-baseline-6000.3.json --shared-baseline docs/shared-content-baseline-6000.3.json`
 re-extracts every page's visible text with an extractor that shares no code with the
 production parser and fails if page-unique content is missing from the derived Markdown,
 if a page's derived/reference size ratio collapses, or if the corpus lists fewer pages
@@ -45,9 +45,13 @@ than the source tree holds. It needs the extracted HTML on disk (build with
 ([docs/audit-baseline-6000.3.json](docs/audit-baseline-6000.3.json)) lists the 496
 individually triaged false positives (1.27% of pages, one known footer-adjacency class)
 with their accepted magnitudes pinned, so the audit gates on new flags and on any
-worsening of an accepted one. The audit is a strong regression detector, not a
-mathematical proof - it works at word-token granularity and has documented
-false-negative classes (shared boilerplate sentences, punctuation-only changes); the
+worsening of an accepted one. The `--shared-baseline` manifest
+([docs/shared-content-baseline-6000.3.json](docs/shared-content-baseline-6000.3.json))
+extends the guard to shared boilerplate sentences repeated across many pages (e.g. the
+`hideFlags` description on 327 pages), which the page-local check alone cannot see - a
+class-wide strip of such a sentence gates the run. The audit is a strong regression
+detector, not a mathematical proof - it works at word-token granularity and has
+documented false-negative classes (punctuation-only changes, sub-run stream edges); the
 precise statement of what it does and does not prove is in
 [docs/DESIGN.md](docs/DESIGN.md).
 

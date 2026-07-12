@@ -72,17 +72,22 @@ The checks below read the extracted HTML (`--source unity-docs`), so build with
 - Content-lossless audit - run after every transform change; it is the guard proving the
   derived Markdown lost no page-unique content (an independent re-extraction of every
   page's visible text, sharing no code with the production parser):
-  `bin/unity-doc-corpus audit --source unity-docs --corpus unity-docs/_agent --baseline docs/audit-baseline-6000.3.json`
+  `bin/unity-doc-corpus audit --source unity-docs --corpus unity-docs/_agent --baseline docs/audit-baseline-6000.3.json --shared-baseline docs/shared-content-baseline-6000.3.json`
   Exit is nonzero only on gating flags not covered by the baseline allowlist (a new
   transform regression, a baselined page that worsened beyond its recorded magnitude, a
-  gating ratio collapse, or a corpus page count below the baseline's); stale baseline
-  entries are reported but do not fail the run. A source-vs-corpus page-count mismatch
-  refuses the audit outright (rebuild, or the pair is from different doc versions).
-  After triaging new flags, regenerate the allowlist with
+  gating ratio collapse, or a corpus page count below the baseline's), or on a
+  shared-content collapse against the `--shared-baseline` manifest (a boilerplate sentence
+  shared across many pages stripped corpus-wide - the page-local check cannot see this);
+  stale baseline entries are reported but do not fail the run. A source-vs-corpus
+  page-count mismatch refuses the audit outright (rebuild, or the pair is from different
+  doc versions). After triaging new flags, regenerate the allowlist with
   `--write-baseline docs/audit-baseline-6000.3.json` - writing it is explicit acceptance
-  of the current flag set and re-pins magnitudes and page count. `--output report.json`
-  saves the full JSON report. What the audit proves and its documented false-negative
-  classes: docs/DESIGN.md.
+  of the current flag set and re-pins magnitudes and page count; regenerate the
+  shared-content manifest the same way with
+  `--write-shared-baseline docs/shared-content-baseline-6000.3.json` after a transform
+  change that legitimately alters shared content. `--output report.json` saves the full
+  JSON report. What the audit proves and its documented false-negative classes:
+  docs/DESIGN.md.
 - Compare two corpora after changing the builder:
   `python scripts/compare_corpus.py --source unity-docs --baseline .cache/corpus-baseline --candidate unity-docs/_agent`
 - Recall/efficiency benchmark against the original HTML:
