@@ -652,3 +652,48 @@ func TestAuditRatioGateCatchesBlankedDuplicate(t *testing.T) {
 		t.Fatalf("blanked duplicate must trip the gating ratio collapse: %+v", blanked)
 	}
 }
+
+// The whole-page-loss gate refuses when countSectionHTML != len(pages). That gate is only sound
+// if the audit's independent recount tracks the builder's own file discovery exactly - otherwise
+// it would misfire on a clean corpus. This pins the two to agree across the edge shapes a real
+// Unity tree carries: a docdata/ subdir holding the JSON titles file (ignored) alongside a stray
+// .html (counted), a mixed-case extension, and a non-HTML sibling. If collectHTML's predicate
+// ever drifts from countSectionHTML's, this fails instead of a live audit refusing a good corpus.
+func TestCountSectionHTMLMatchesBuilderDiscovery(t *testing.T) {
+	root := t.TempDir()
+	files := []string{
+		"Manual/Intro.html",
+		"Manual/Physics/Colliders.html",
+		"Manual/docdata/index.json",      // titles source, not a page
+		"Manual/docdata/toc.html",        // stray html under docdata
+		"ScriptReference/Rigidbody.HTML", // mixed-case extension
+		"ScriptReference/notes.txt",      // non-html sibling
+	}
+	for _, rel := range files {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := countSectionHTML(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := 0
+	for _, section := range sectionDirs {
+		discovered, err := collectHTML(filepath.Join(root, section))
+		if err != nil {
+			t.Fatal(err)
+		}
+		want += len(discovered)
+	}
+	if got != want {
+		t.Errorf("countSectionHTML=%d but builder discovery=%d - the 1:1 page-count gate would misfire on a clean corpus", got, want)
+	}
+	if want != 4 {
+		t.Errorf("sanity: expected 4 discovered .html files (2 Manual + docdata/toc + Rigidbody.HTML), got %d", want)
+	}
+}

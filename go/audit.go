@@ -208,6 +208,10 @@ func runAudit(args []string) {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
+		if mm := s.configMismatch(cfg); mm != "" {
+			fmt.Fprintf(os.Stderr, "error: shared baseline %s was generated under a different audit config (%s); its pinned fingerprints do not correspond to this run, so the shared-content gate would silently pass - regenerate it with --write-shared-baseline or match the flags\n", *sharedBaselinePath, mm)
+			os.Exit(1)
+		}
 		shared = s
 	}
 
