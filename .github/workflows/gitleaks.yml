@@ -1,0 +1,25 @@
+name: gitleaks
+
+# Secret scanning over the committed history. fetch-depth 0 gives the action
+# the full history to scan. No GITLEAKS_LICENSE is set on purpose: a license
+# key is only required for repositories owned by an Organization account, not
+# a personal account (gitleaks-action EULA).
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

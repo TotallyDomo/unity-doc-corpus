@@ -1,0 +1,36 @@
+name: scorecard
+
+# OpenSSF Scorecard: a one-shot security-posture measurement to decide whether
+# a Scorecard badge is worth displaying (a weak public score is worse than no
+# badge). publish_results is required to read the aggregate score back from
+# api.securityscorecards.dev. If the score does not justify a badge this
+# workflow is removed rather than kept publishing a weak result.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '41 6 * * 1'
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ossf/scorecard-action@v2
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif

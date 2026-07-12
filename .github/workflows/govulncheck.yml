@@ -1,0 +1,30 @@
+name: govulncheck
+
+# Scans the Go module for known vulnerabilities in the standard library and
+# dependencies. Runs on every push and PR, plus weekly so newly disclosed
+# vulns are caught without a code change. The action does its own checkout and
+# Go setup; go-version-file tracks the module's declared version (latest 1.26
+# patch on the runner), so a stdlib fix lands as soon as Go ships it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '27 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - id: govulncheck
+        uses: golang/govulncheck-action@v1
+        with:
+          go-version-file: go/go.mod
+          work-dir: go
+          go-package: ./...

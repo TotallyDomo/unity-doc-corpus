@@ -1,5 +1,8 @@
 # unity-doc-corpus
 
+[![govulncheck](https://github.com/TotallyDomo/unity-doc-corpus/actions/workflows/govulncheck.yml/badge.svg)](https://github.com/TotallyDomo/unity-doc-corpus/actions/workflows/govulncheck.yml)
+[![gitleaks](https://github.com/TotallyDomo/unity-doc-corpus/actions/workflows/gitleaks.yml/badge.svg)](https://github.com/TotallyDomo/unity-doc-corpus/actions/workflows/gitleaks.yml)
+
 Turn Unity's official offline documentation into an agent-optimized local search corpus:
 stripped Markdown, SQLite FTS5 full-text search, and a benchmarked lookup path - built
 entirely on your machine by a pure-Go (CGO-free) tool.
