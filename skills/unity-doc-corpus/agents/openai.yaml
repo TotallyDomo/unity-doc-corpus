@@ -1,0 +1,4 @@
+interface:
+  display_name: "Unity Doc Corpus"
+  short_description: "Build and maintain a local Unity documentation corpus"
+  default_prompt: "Use $unity-doc-corpus to build or maintain the local Unity documentation corpus."

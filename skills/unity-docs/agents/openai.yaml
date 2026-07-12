@@ -1,0 +1,4 @@
+interface:
+  display_name: "Unity Docs"
+  short_description: "Search version-pinned local Unity documentation"
+  default_prompt: "Use $unity-docs to answer this Unity documentation question from the local version-pinned corpus."
