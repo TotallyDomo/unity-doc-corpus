@@ -9,7 +9,7 @@ import (
 
 func writeFetchMarker(t *testing.T, root, zipName string) {
 	t.Helper()
-	marker := `{"unity_version":"6000.3","zip_url":"https://example","zip_sha256":"x","fetched_at_utc":"2026-07-09T00:00:00Z","zip_name":"` + zipName + `"}`
+	marker := `{"unity_version":"6000.3","zip_url":"https://cloudmedia-docs.unity3d.com/docscloudstorage/en/6000.3/UnityDocumentation.zip","zip_sha256":"0d776d70548fb00d0c9f6c763e6fc3517fa73e6f8aea3bf235bc43fcf94a75b9","fetched_at_utc":"2026-07-09T00:00:00Z","zip_name":"` + zipName + `"}`
 	if err := os.WriteFile(filepath.Join(root, fetchMarkerName), []byte(marker), 0o644); err != nil {
 		t.Fatal(err)
 	}

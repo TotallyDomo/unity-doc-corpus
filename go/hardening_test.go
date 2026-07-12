@@ -264,10 +264,16 @@ func TestPrepareFetchDestinationRefusesUnmarkedDir(t *testing.T) {
 		t.Fatalf("guard deleted data it should have refused to touch: %v", err)
 	}
 
-	marked := t.TempDir()
-	if err := os.WriteFile(filepath.Join(marked, fetchMarkerName), []byte("{}"), 0o644); err != nil {
+	invalid := t.TempDir()
+	if err := os.WriteFile(filepath.Join(invalid, fetchMarkerName), []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := prepareFetchDestination(invalid, true); err == nil {
+		t.Fatal("an empty marker must not authorize recursive deletion")
+	}
+
+	marked := t.TempDir()
+	writeFetchMarker(t, marked, "")
 	if err := prepareFetchDestination(marked, true); err != nil {
 		t.Fatalf("marked dir with --force should be replaceable: %v", err)
 	}

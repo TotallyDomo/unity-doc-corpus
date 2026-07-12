@@ -2,8 +2,10 @@ package main
 
 import (
 	"archive/zip"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -109,6 +111,39 @@ func TestExtractSectionsRejectsZipSlip(t *testing.T) {
 	}
 }
 
+func TestExtractSectionsRejectsDuplicateTargets(t *testing.T) {
+	tmp := t.TempDir()
+	zipPath := filepath.Join(tmp, "duplicate.zip")
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := zip.NewWriter(f)
+	for _, entry := range []struct{ name, body string }{
+		{"Manual/A.html", "first"},
+		{"Manual/A.html", "second"},
+		{"ScriptReference/B.html", "ref"},
+	} {
+		fw, err := w.Create(entry.name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fw.Write([]byte(entry.body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	err = extractSections(zipPath, filepath.Join(tmp, "dest"), 4)
+	if err == nil || !strings.Contains(err.Error(), "same output path") {
+		t.Fatalf("duplicate zip targets must be refused deterministically, got: %v", err)
+	}
+}
+
 // findSectionPrefix / extractSections fail clearly when the zip lacks a directory holding both
 // Manual and ScriptReference.
 func TestExtractSectionsMissingSection(t *testing.T) {
@@ -165,5 +200,118 @@ func TestZipURLReMatchesBothBucketHosts(t *testing.T) {
 		if got := zipURLRe.FindString(page); got != "" {
 			t.Fatalf("zipURLRe matched untrusted URL %q in %q", got, page)
 		}
+	}
+}
+
+func TestValidateFetchInfoRejectsUnsafeMarkerFields(t *testing.T) {
+	valid := fetchInfo{
+		UnityVersion: "6000.3",
+		ZipURL:       "https://cloudmedia-docs.unity3d.com/docscloudstorage/en/6000.3/UnityDocumentation.zip",
+		ZipSHA256:    strings.Repeat("a", 64),
+		FetchedAtUTC: "2026-07-12T00:00:00Z",
+		ZipName:      "6000.3-UnityDocumentation.zip",
+	}
+	if err := validateFetchInfo(valid); err != nil {
+		t.Fatalf("valid marker rejected: %v", err)
+	}
+	for name, mutate := range map[string]func(*fetchInfo){
+		"version traversal": func(i *fetchInfo) { i.UnityVersion = "../6000.3" },
+		"zip traversal":     func(i *fetchInfo) { i.ZipName = "../outside.zip" },
+		"foreign bucket":    func(i *fetchInfo) { i.ZipURL = "https://storage.googleapis.com/other/x.zip" },
+		"bad hash":          func(i *fetchInfo) { i.ZipSHA256 = "x" },
+		"bad time":          func(i *fetchInfo) { i.FetchedAtUTC = "today" },
+	} {
+		got := valid
+		mutate(&got)
+		if err := validateFetchInfo(got); err == nil {
+			t.Errorf("%s must be rejected", name)
+		}
+	}
+}
+
+func TestSalvageRetainedZipVerifiesMarkerHash(t *testing.T) {
+	root := t.TempDir()
+	dest := filepath.Join(root, "docs")
+	cache := filepath.Join(root, "cache")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cache, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	zipName := "6000.3-UnityDocumentation.zip"
+	retained := filepath.Join(dest, zipName)
+	writeTestZip(t, retained, map[string]string{
+		"Manual/A.html":          "a",
+		"ScriptReference/B.html": "b",
+	})
+	actualSHA, err := hashFileSHA256(retained)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := fetchInfo{
+		UnityVersion: "6000.3",
+		ZipURL:       "https://cloudmedia-docs.unity3d.com/docscloudstorage/en/6000.3/UnityDocumentation.zip",
+		ZipSHA256:    strings.Repeat("0", 64),
+		FetchedAtUTC: "2026-07-12T00:00:00Z",
+		ZipName:      zipName,
+	}
+	writeMarker := func() {
+		data, err := json.Marshal(info)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dest, fetchMarkerName), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeMarker()
+	cacheZip := filepath.Join(cache, zipName)
+	if err := salvageRetainedZip(dest, cacheZip, "6000.3", info.ZipURL); err == nil {
+		t.Fatal("marker/hash mismatch must refuse retained-zip reuse")
+	}
+	if _, err := os.Stat(retained); err != nil {
+		t.Fatalf("refused salvage must leave retained zip untouched: %v", err)
+	}
+	info.ZipSHA256 = actualSHA
+	writeMarker()
+	resolvedURL := "https://storage.googleapis.com/docscloudstorage/6000.3/UnityDocumentation.zip"
+	if err := salvageRetainedZip(dest, cacheZip, "6000.3", resolvedURL); err != nil {
+		t.Fatalf("valid retained zip refused: %v", err)
+	}
+	if got, err := hashFileSHA256(cacheZip); err != nil || got != actualSHA {
+		t.Fatalf("salvaged zip mismatch: sha=%s err=%v", got, err)
+	}
+	if got, err := validateCachedZip(cacheZip, resolvedURL); err != nil || got != actualSHA {
+		t.Fatalf("salvaged zip provenance mismatch: sha=%s err=%v", got, err)
+	}
+	if _, err := os.Stat(retained); !os.IsNotExist(err) {
+		t.Fatal("successful salvage must move the retained zip into cache")
+	}
+}
+
+func TestCachedZipRequiresTrustedProvenance(t *testing.T) {
+	root := t.TempDir()
+	zipPath := filepath.Join(root, "6000.3-UnityDocumentation.zip")
+	writeTestZip(t, zipPath, map[string]string{
+		"Manual/A.html":          "a",
+		"ScriptReference/B.html": "b",
+	})
+	url := "https://cloudmedia-docs.unity3d.com/docscloudstorage/en/6000.3/UnityDocumentation.zip"
+	if _, err := validateCachedZip(zipPath, url); err == nil {
+		t.Fatal("a pre-positioned cache zip without provenance must not be trusted")
+	}
+	sha, err := hashFileSHA256(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeCacheInfo(zipPath, url, sha); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := validateCachedZip(zipPath, url); err != nil || got != sha {
+		t.Fatalf("valid cache provenance rejected: sha=%s err=%v", got, err)
+	}
+	if _, err := validateCachedZip(zipPath, strings.Replace(url, "6000.3", "6000.4", 1)); err == nil {
+		t.Fatal("cache provenance for another resolved URL must be refused")
 	}
 }
