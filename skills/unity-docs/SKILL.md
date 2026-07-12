@@ -5,15 +5,15 @@ description: Look up Unity engine documentation (Manual and Scripting API) offli
 
 # unity-docs (lookup)
 
-Offline lookup over the derived Unity documentation corpus produced by the `unity-doc-corpus`
-builder skill. All reads are local; nothing is fetched (the one exception is named in step 5
-and the trust surface).
+Offline-first lookup over the derived Unity documentation corpus produced by the
+`unity-doc-corpus` builder skill. Normal reads are local; the one online verification
+fallback is named in step 5 and the trust surface.
 
 The corpus root is the builder's `--output` directory - by default `unity-docs/_agent` under
 the repository where the builder ran. A valid corpus root contains a `.unity-doc-agent-corpus`
 marker file plus `manifest.json`, `search_index.tsv`, `docs.sqlite`, and `text/`. If no corpus
-root is known or present, ask the user to run the builder quickstart first (a one-time
-several-hundred-MB fetch plus a fast local build); do not build it unprompted.
+root is known or present, ask the user for its location or to run the builder quickstart (a
+one-time several-hundred-MB fetch plus a fast local build); do not build it unprompted.
 
 Scope: the corpus holds Unity's Manual and Scripting API reference (what the official offline
 zip contains). Some package manuals (URP, for example) are bundled into the Manual, but most
@@ -27,8 +27,9 @@ empty, say the corpus does not cover it rather than concluding the API does not 
    (`unity_version` is `unknown` when the docs were not fetched by this tool - then ask the
    user which version their docs are.)
 2. Exact API, class, or page names: search `search_index.tsv`. It is a plain TSV with header
-   `page_key  section  page_id  title  source_rel  md_rel  canonical_url` - grep the title or
-   page_id column, e.g. `grep -i "AsyncOperation" search_index.tsv | head`.
+   `page_key  section  page_id  title  source_rel  md_rel  canonical_url`. Use the available
+   text-search tool against the title or page-id column, for example
+   `rg -i "AsyncOperation" search_index.tsv`.
 3. Concept or free-text queries: FTS5 over `docs.sqlite`. If the `unity-doc-corpus` builder
    binary is on hand (you built the repo), it runs the query with no other tooling:
 
