@@ -21,14 +21,31 @@ ones. The agent needs a documentation lookup path that is:
   switchers around the actual content.
 - **Version-pinned.** A project is on one Unity version. `docs.unity3d.com` URLs
   redirect across versions, and hosted indexes track whatever was scraped last.
-- **Offline and deterministic.** No network dependency, no rate limits, no API keys,
-  and the same input produces the same corpus.
+- **Offline-first and deterministic.** Normal lookup and source verification need no
+  network while the retained zip or extracted HTML exists: no rate limits or API keys,
+  and the same input produces the same derived page and index content. If both local
+  original forms are deliberately removed, exact verification can fall back to one
+  pinned Unity page online.
 - **Verifiable.** A stripped, transformed page is a cache, not a source of truth. The
   agent must be able to walk back to the untouched original for load-bearing claims.
 
 The naive offline baseline - grepping the official offline documentation zip - fails
 the first requirement badly (648 MB of HTML for Unity 6000.3) and, as the benchmark
 below shows, is ~50x slower per lookup and far worse at finding concept pages.
+
+## Architecture at a glance
+
+```
+Unity offline zip
+  -> fetch -> retained zip + disposable extracted HTML
+  -> build -> stripped Markdown + FTS5/TSV indexes + metadata
+  -> lookup -> compact page -> original-source verification when needed
+```
+
+The retained zip is the local source artifact, the extracted HTML is a rebuild cache, and
+the derived corpus is the cheap lookup representation. Exact-name lookup handles APIs,
+FTS5 handles concepts, and the source path plus SHA-256 on every derived page closes the
+loop back to the original bytes.
 
 ## Constraints
 
@@ -105,8 +122,7 @@ searching and skimming needs the words and the structure landmarks (headings, li
 and anything load-bearing gets verified against the original anyway (see below).
 The result is a 90.5% byte reduction (648 MB -> 62 MB for Unity 6000.3).
 
-Lossy in structure must still be lossless in content, and that invariant is audited, not
-trusted: the `audit` verb
+Lossy in structure still needs a strong content-preservation guard. The `audit` verb
 (`bin/unity-doc-corpus audit --source unity-docs --corpus unity-docs/_agent --baseline docs/audit-baseline-6000.3.json --shared-baseline docs/shared-content-baseline-6000.3.json`,
 run after every transform change) re-extracts every page's visible text with an
 independent extractor that shares no code with the production parser, shingles it, and
@@ -181,8 +197,9 @@ at the untouched original HTML and `source_sha256` proves which bytes were trans
 Corpus-level artifacts:
 
 - `search_index.tsv` - one row per page (key, section, id, title, source path, md path,
-  canonical URL). The exact-name lane: `grep -i "AsyncOperation" search_index.tsv`
-  answers API-name lookups without touching a database.
+  canonical URL). The exact-name lane: whatever text-search tool is on hand (`rg` or `grep`,
+  e.g. `rg -i "AsyncOperation" search_index.tsv`) answers API-name lookups without touching a
+  database.
 - `docs.sqlite` - a `pages` metadata table plus a `pages_fts` FTS5 table (title + body)
   queried with bm25 ranking at a 10:1 title:body weighting (unweighted bm25 buries short
   canonical pages under their member pages; the weight is measured, see the benchmark).
@@ -197,13 +214,17 @@ Corpus-level artifacts:
 
 ### Lookup path (the skills)
 
-Two Claude Code skills under `skills/` split the cost model: `unity-docs` (lookup) is
+Two portable Agent Skills under `skills/`, packaged for Claude Code and Codex, split the
+cost model. `unity-docs` (lookup) is
 the cheap, day-to-day path - exact names via the TSV, concepts via FTS5 (the built-in
 `unity-doc-corpus search` verb, or any SQLite client), then open the Markdown page, then
 verify against the original for load-bearing claims. The
 `unity-doc-corpus` skill (builder/maintenance) owns fetch/build/benchmark and only
 fires on explicit request, so an ordinary doc question never triggers a several-hundred-MB
-fetch. The lookup skill performs no network access at all.
+fetch. Lookup and verification are fully offline while the retained zip or extracted HTML
+exists; if both were removed, the lookup skill may fetch one pinned Unity page for announced
+source verification. Each skill also carries optional `agents/openai.yaml` presentation
+metadata for Codex, which Claude Code ignores.
 
 ## Benchmark
 
@@ -298,8 +319,9 @@ are online and version-agnostic, Context7 already serves Unity doc snippets.
 
 What it does not offer is exactly this project's niche: the corpus here is derived from
 the specific offline zip *you* fetched for *your* Unity version, works air-gapped, has
-no rate limits or API key, is deterministic (same zip -> same corpus, SHA-256 chain from
-every derived page back to its source bytes), and ships a published recall benchmark.
+no rate limits or API key, is deterministic (same zip -> same derived page/index content,
+with a SHA-256 chain from every derived page back to its source bytes), and ships a
+published recall benchmark.
 A hosted service cannot be version-pinned to your project or audited page-by-page
 against the originals on your disk.
 
