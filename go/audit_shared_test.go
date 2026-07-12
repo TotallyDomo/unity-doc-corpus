@@ -208,3 +208,127 @@ func TestSharedBaselineFingerprintCodec(t *testing.T) {
 		t.Error("corrupt manifest fingerprints must error, not silently yield an empty set")
 	}
 }
+
+// --- S7 hardening probes (round 2, adversarial review of the S5/S6 surfaces) ---
+
+// A shared-content manifest generated under one shingle geometry cannot gate a run using a
+// different one: the pinned fingerprints are width-n hashes, so at another --shingle-n every
+// pinned fingerprint's document frequency reads as 0 and Part B silently passes even through a
+// total strip. The guard must refuse the mismatch rather than certify a gate that cannot fire.
+func TestSharedBaselineConfigMismatchRefused(t *testing.T) {
+	cfg := fixtureAuditConfig()
+	src, corpus := buildSharedContentFixture(t, nil)
+	clean, err := auditCorpus(src, corpus, 4, cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "shared-baseline.json")
+	if err := writeSharedBaseline(path, clean.contentShingles, cfg); err != nil {
+		t.Fatal(err)
+	}
+	sb, err := loadSharedBaseline(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if mm := sb.configMismatch(cfg); mm != "" {
+		t.Errorf("matching config must report no mismatch, got %q", mm)
+	}
+	wrong := cfg
+	wrong.shingleN = cfg.shingleN + 1
+	if mm := sb.configMismatch(wrong); mm == "" {
+		t.Error("a drifted --shingle-n must be reported as a config mismatch")
+	}
+
+	// Prove the silent failure the guard exists to prevent: audited at the wrong width, a TOTAL
+	// strip leaves the manifest completely inert (0 collapsed) though every shared sentence is
+	// gone. This is why configMismatch must refuse before the gate ever runs.
+	stripSrc, stripCorpus := buildSharedContentFixture(t, stripAllPages())
+	blind, err := auditCorpus(stripSrc, stripCorpus, 4, wrong, sb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if blind.sharedLoss != 0 {
+		t.Fatalf("sanity: at a mismatched width the manifest cannot see collapse, got sharedLoss=%d", blind.sharedLoss)
+	}
+
+	// A manifest that predates the recorded-config fields (all zero) is not second-guessed - the
+	// guard degrades to the prior behavior instead of hard-failing on an old file.
+	sb.ShingleN, sb.MaxShingleDF, sb.ContentMinDF = 0, 0, 0
+	if mm := sb.configMismatch(cfg); mm != "" {
+		t.Errorf("unspecified manifest config must not trip the guard, got %q", mm)
+	}
+}
+
+// False-positive probe: a shared sentence GENUINELY removed upstream (gone from both the source
+// HTML and the derived Markdown across the whole corpus, e.g. Unity reworded boilerplate in a new
+// docs version) is legitimate churn, not a transform regression. Part B anchors on ref-DF >
+// max-df precisely so this does not gate - a naive "pinned shingle absent from the Markdown"
+// check would false-alarm on every such edit.
+func TestSharedBaselineIgnoresLegitimateSourceRemoval(t *testing.T) {
+	cfg := fixtureAuditConfig()
+	src, corpus := buildSharedContentFixture(t, nil)
+	clean, err := auditCorpus(src, corpus, 4, cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(clean.contentShingles) == 0 {
+		t.Fatal("fixture must pin some shared content to make the probe meaningful")
+	}
+	path := filepath.Join(t.TempDir(), "shared-baseline.json")
+	if err := writeSharedBaseline(path, clean.contentShingles, cfg); err != nil {
+		t.Fatal(err)
+	}
+	sb, err := loadSharedBaseline(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rmSrc, rmCorpus := buildNoSharedFixture(t)
+	res, err := auditCorpus(rmSrc, rmCorpus, 4, cfg, sb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.sharedLoss != 0 {
+		t.Errorf("legitimate corpus-wide source removal must not trip the shared-content gate, got sharedLoss=%d (%v)", res.sharedLoss, res.sharedQuotes)
+	}
+}
+
+// buildNoSharedFixture writes the same page set as buildSharedContentFixture but with the shared
+// sentence absent from BOTH the source HTML and the Markdown - the "boilerplate genuinely deleted
+// upstream" state, where the pinned shingles' ref-DF has dropped to 0.
+func buildNoSharedFixture(t *testing.T) (string, string) {
+	t.Helper()
+	root := t.TempDir()
+	sourceDir := filepath.Join(root, "source")
+	corpusDir := filepath.Join(root, "corpus")
+	for _, d := range []string{
+		filepath.Join(sourceDir, "Manual"),
+		filepath.Join(sourceDir, "ScriptReference"),
+		filepath.Join(corpusDir, "text", "Manual"),
+	} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var jsonl strings.Builder
+	for p := 0; p < sharedFixturePages; p++ {
+		name := fmt.Sprintf("Shared%02d", p)
+		uniq := fixturePara(p, 0)
+		html := "<html><body><div id=\"content-wrap\"><h1>" + name + "</h1><p>" + uniq + "</p></div></body></html>\n"
+		if err := os.WriteFile(filepath.Join(sourceDir, "Manual", name+".html"), []byte(html), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		md := "---\ntitle: " + name + "\n---\n\n" + uniq + "\n"
+		if err := os.WriteFile(filepath.Join(corpusDir, "text", "Manual", name+".md"), []byte(md), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		jsonl.WriteString(fmt.Sprintf(
+			`{"page_key":"Manual/%s","section":"Manual","source_rel":"Manual/%s.html","md_rel":"text/Manual/%s.md"}`+"\n",
+			name, name, name))
+	}
+	if err := os.WriteFile(filepath.Join(corpusDir, "pages.jsonl"), []byte(jsonl.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return sourceDir, corpusDir
+}
