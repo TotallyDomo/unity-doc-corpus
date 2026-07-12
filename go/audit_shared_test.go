@@ -7,6 +7,8 @@ package main
 // catches a partial strip; Part B (the shared-content manifest) catches a total strip.
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -188,10 +190,10 @@ func TestAuditSharedContentTotalStripNeedsManifest(t *testing.T) {
 	}
 }
 
-// The manifest fingerprint codec round-trips an unsorted, duplicated fingerprint list into the
-// same membership set, and stays compact (delta-varint-base64).
+// The manifest fingerprint codec round-trips a valid fingerprint list and rejects malformed
+// delta streams instead of silently weakening the pinned set.
 func TestSharedBaselineFingerprintCodec(t *testing.T) {
-	fps := []uint64{42, 1, 1 << 40, 5, 42, 0}
+	fps := []uint64{42, 1, 1 << 40, 5, 0}
 	set, err := decodeFingerprints(encodeFingerprints(fps))
 	if err != nil {
 		t.Fatal(err)
@@ -202,10 +204,13 @@ func TestSharedBaselineFingerprintCodec(t *testing.T) {
 		}
 	}
 	if len(set) != 5 {
-		t.Errorf("duplicates must collapse: got %d distinct, want 5", len(set))
+		t.Errorf("got %d distinct, want 5", len(set))
 	}
 	if _, err := decodeFingerprints("not_base64!!"); err == nil {
 		t.Error("corrupt manifest fingerprints must error, not silently yield an empty set")
+	}
+	if _, err := decodeFingerprints(base64.StdEncoding.EncodeToString([]byte{1, 0})); err == nil {
+		t.Error("zero delta (duplicate fingerprint) must be rejected")
 	}
 }
 
@@ -252,11 +257,41 @@ func TestSharedBaselineConfigMismatchRefused(t *testing.T) {
 		t.Fatalf("sanity: at a mismatched width the manifest cannot see collapse, got sharedLoss=%d", blind.sharedLoss)
 	}
 
-	// A manifest that predates the recorded-config fields (all zero) is not second-guessed - the
-	// guard degrades to the prior behavior instead of hard-failing on an old file.
+	// Missing config is a mismatch; loadSharedBaseline also rejects such a manifest before this
+	// point, so a partial hand-authored file cannot silently disable the gate.
 	sb.ShingleN, sb.MaxShingleDF, sb.ContentMinDF = 0, 0, 0
-	if mm := sb.configMismatch(cfg); mm != "" {
-		t.Errorf("unspecified manifest config must not trip the guard, got %q", mm)
+	if mm := sb.configMismatch(cfg); mm == "" {
+		t.Error("unspecified manifest config must trip the guard")
+	}
+}
+
+func TestSharedBaselineRejectsTruncatedOrEmptyManifest(t *testing.T) {
+	cfg := fixtureAuditConfig()
+	path := filepath.Join(t.TempDir(), "shared.json")
+	valid := sharedBaseline{
+		ShingleN: cfg.shingleN, MaxShingleDF: int(cfg.maxDF), ContentMinDF: cfg.contentMinDF,
+		ShingleCount: 2, Fingerprints: encodeFingerprints([]uint64{10, 20}),
+	}
+	data, _ := json.Marshal(valid)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadSharedBaseline(path); err != nil {
+		t.Fatalf("valid manifest refused: %v", err)
+	}
+	valid.ShingleCount = 3
+	data, _ = json.Marshal(valid)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadSharedBaseline(path); err == nil {
+		t.Fatal("declared/decoded shingle-count mismatch must be refused")
+	}
+	if err := os.WriteFile(path, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadSharedBaseline(path); err == nil {
+		t.Fatal("empty manifest must be refused")
 	}
 }
 

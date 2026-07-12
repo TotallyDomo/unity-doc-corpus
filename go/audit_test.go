@@ -8,6 +8,7 @@ package main
 // (the transform's normal, deliberate difference) stays unflagged.
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -193,6 +194,7 @@ func TestAuditChromeOnlyDifferenceNotFlagged(t *testing.T) {
 // are baselined AT THEIR RECORDED MAGNITUDE, new flags and worsened known flags gate, and
 // entries that stop flagging are reported as stale.
 func TestAuditBaselinePartitionAndRoundTrip(t *testing.T) {
+	cfg := fixtureAuditConfig()
 	mk := func(key string, spans, windows, mdTok int) *auditFlag {
 		return &auditFlag{PageKey: key, MissingSpans: spans, MissingWindow: windows, MDTokens: mdTok}
 	}
@@ -205,7 +207,7 @@ func TestAuditBaselinePartitionAndRoundTrip(t *testing.T) {
 
 	// Round-trip through the v2 file format: magnitudes and page count are pinned.
 	path := filepath.Join(t.TempDir(), "baseline.json")
-	if err := writeAuditBaseline(path, &auditResult{pages: make([]pageRef, 12), flagged: flagged}); err != nil {
+	if err := writeAuditBaseline(path, &auditResult{pages: make([]pageRef, 12), flagged: flagged}, cfg); err != nil {
 		t.Fatal(err)
 	}
 	base, err := loadAuditBaseline(path)
@@ -223,6 +225,21 @@ func TestAuditBaselinePartitionAndRoundTrip(t *testing.T) {
 	}
 	if base.legacy() {
 		t.Fatal("v2 baseline must not read as legacy")
+	}
+	if mm := base.configMismatch(cfg); mm != "" {
+		t.Fatalf("matching baseline config rejected: %s", mm)
+	}
+	for name, mutate := range map[string]func(*auditConfig){
+		"shingle-n":  func(c *auditConfig) { c.shingleN++ },
+		"max-df":     func(c *auditConfig) { c.maxDF++ },
+		"min-run":    func(c *auditConfig) { c.minRun++ },
+		"ratio-gate": func(c *auditConfig) { c.ratioGate = 0 },
+	} {
+		drifted := cfg
+		mutate(&drifted)
+		if mm := base.configMismatch(drifted); mm == "" {
+			t.Errorf("drifted %s must be refused", name)
+		}
 	}
 
 	// Full coverage at identical magnitude: nothing new, flags marked baselined.
@@ -299,6 +316,23 @@ func TestAuditBaselinePartitionAndRoundTrip(t *testing.T) {
 	}
 	if got := baselinePageShrink(legacy, 1); got != 0 {
 		t.Errorf("legacy baseline has no recorded count to gate on, got %d", got)
+	}
+}
+
+func TestAuditBaselineRejectsMalformedV2(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "baseline.json")
+	for name, body := range map[string]string{
+		"empty":     `{}`,
+		"zero-page": `{"schema_version":2,"page_count":0,"shingle_n":5,"max_shingle_df":4,"content_min_df":5,"min_run":5,"ratio_gate_factor":0.25,"ratio_min_tokens":30}`,
+		"duplicate": `{"schema_version":2,"page_count":2,"shingle_n":5,"max_shingle_df":4,"content_min_df":5,"min_run":5,"ratio_gate_factor":0.25,"ratio_min_tokens":30,"pages":[{"page_key":"Manual/A"},{"page_key":"Manual/A"}]}`,
+		"negative":  `{"schema_version":2,"page_count":2,"shingle_n":5,"max_shingle_df":4,"content_min_df":5,"min_run":5,"ratio_gate_factor":0.25,"ratio_min_tokens":30,"pages":[{"page_key":"Manual/A","missing_spans":-1}]}`,
+	} {
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := loadAuditBaseline(path); err == nil {
+			t.Errorf("%s baseline must be refused", name)
+		}
 	}
 }
 
@@ -493,7 +527,7 @@ func TestAuditBaselineGatesFixtureRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(t.TempDir(), "baseline.json")
-	if err := writeAuditBaseline(path, res); err != nil {
+	if err := writeAuditBaseline(path, res, fixtureAuditConfig()); err != nil {
 		t.Fatal(err)
 	}
 	base, err := loadAuditBaseline(path)
@@ -566,6 +600,70 @@ func TestAuditCorpusRefusesPageCountMismatch(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "build regression") {
 		t.Errorf("mismatch error must explain itself: %v", err)
+	}
+}
+
+func TestAuditCorpusRefusesDuplicatePageReplacingSource(t *testing.T) {
+	sourceDir, corpusDir := buildAuditFixture(t)
+	path := filepath.Join(corpusDir, "pages.jsonl")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	lines[1] = lines[0]
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = auditCorpus(sourceDir, corpusDir, 2, fixtureAuditConfig(), nil)
+	if err == nil || !strings.Contains(err.Error(), "duplicate") {
+		t.Fatalf("duplicate record replacing a real source page must be refused, got: %v", err)
+	}
+}
+
+func TestAuditCorpusRefusesSwappedMarkdownIdentity(t *testing.T) {
+	_, corpusDir := buildAuditFixture(t)
+	path := filepath.Join(corpusDir, "pages.jsonl")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	var a, b map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &a); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(lines[1]), &b); err != nil {
+		t.Fatal(err)
+	}
+	a["md_rel"], b["md_rel"] = b["md_rel"], a["md_rel"]
+	for i, rec := range []map[string]any{a, b} {
+		encoded, err := json.Marshal(rec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lines[i] = string(encoded)
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadPageRefs(corpusDir); err == nil || !strings.Contains(err.Error(), "identity mismatch") {
+		t.Fatalf("swapped Markdown paths must be refused, got: %v", err)
+	}
+}
+
+func TestLoadPageRefsMatchesBuilderMixedCaseExtension(t *testing.T) {
+	corpus := t.TempDir()
+	record := `{"page_key":"Manual/A.HTML","section":"Manual","source_rel":"Manual/A.HTML","md_rel":"text/Manual/A.HTML.md"}` + "\n"
+	if err := os.WriteFile(filepath.Join(corpus, "pages.jsonl"), []byte(record), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pages, err := loadPageRefs(corpus)
+	if err != nil {
+		t.Fatalf("valid builder identity with mixed-case extension rejected: %v", err)
+	}
+	if len(pages) != 1 || pages[0].PageKey != "Manual/A.HTML" {
+		t.Fatalf("unexpected page refs: %+v", pages)
 	}
 }
 

@@ -1,6 +1,13 @@
 {
+  "schema_version": 2,
   "description": "Accepted content-loss flags for the unity-doc-corpus audit (known false-positive classes, triaged per the M0042 spec). audit --baseline exits zero iff every gating flag is covered by an entry AT OR BELOW its recorded magnitude and the corpus page count has not shrunk below page_count; a covered page that worsens re-gates. Regenerate with --write-baseline only after a human triages the change.",
   "page_count": 39056,
+  "shingle_n": 5,
+  "max_shingle_df": 4,
+  "content_min_df": 5,
+  "min_run": 5,
+  "ratio_gate_factor": 0.25,
+  "ratio_min_tokens": 30,
   "pages": [
     {
       "page_key": "ScriptReference/AI.NavMeshObstacleShape.Box",
