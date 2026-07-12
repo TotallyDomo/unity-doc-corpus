@@ -91,8 +91,14 @@ router-skill shape is planned.
 
 ## Quickstart
 
-Requires Go 1.26+. Python 3 is optional (maintenance benchmarks only). The same four steps
-work as written on Windows, macOS, and Linux; every command runs from the repository root.
+Requires Go 1.26+. Python 3 is optional (maintenance benchmarks only). The four steps below
+are identical on Windows, macOS, and Linux - the tool is pure Go with no platform-specific
+paths - and every command runs from the repository root.
+
+Tested on: Windows (primary development platform, run end-to-end here) and Linux (the Go
+build and full test suite run on `ubuntu-latest` in CI on every push - see the tests badge
+above). macOS has no dedicated hardware in the loop; it shares the same pure-Go,
+platform-neutral code path and is expected to work - reports welcome.
 
 **1. Build the tools from source** (no prebuilt binaries are shipped):
 
@@ -104,7 +110,8 @@ go build -C go -trimpath -o ../bin/ ./cmd/unity-doc-corpus-benchmark
 ```
 
 Go names the binaries itself (`.exe` included on Windows) and writes them to `bin/`.
-`scripts/build.ps1` is the equivalent for PowerShell-script workflows.
+`scripts/build.ps1` (PowerShell) and `scripts/build.sh` (POSIX sh) are convenience wrappers
+around exactly these two commands.
 
 **2. Fetch Unity's official offline docs** (one-time per version; ~475 MB for 6000.3; the
 zip's SHA-256 is printed and recorded in `unity-docs/.unity-doc-fetch`, and the zip itself
