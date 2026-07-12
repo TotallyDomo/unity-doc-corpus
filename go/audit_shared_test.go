@@ -36,12 +36,13 @@ func buildSharedContentFixture(t *testing.T, strip map[int]bool) (string, string
 	for _, d := range []string{
 		filepath.Join(sourceDir, "Manual"),
 		filepath.Join(sourceDir, "ScriptReference"),
-		filepath.Join(corpusDir, "text", "Manual"),
+		corpusDir,
 	} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
+	mdByKey := map[string]string{}
 	var jsonl strings.Builder
 	for p := 0; p < sharedFixturePages; p++ {
 		name := fmt.Sprintf("Shared%02d", p)
@@ -63,9 +64,7 @@ func buildSharedContentFixture(t *testing.T, strip map[int]bool) (string, string
 			mdBody += "\n\n" + sharedContentSentence
 		}
 		md := "---\ntitle: " + name + "\n---\n\n" + mdBody + "\n"
-		if err := os.WriteFile(filepath.Join(corpusDir, "text", "Manual", name+".md"), []byte(md), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		mdByKey[key] = md
 		jsonl.WriteString(fmt.Sprintf(
 			`{"page_key":%q,"section":"Manual","source_rel":"Manual/%s.html","md_rel":"text/Manual/%s.md"}`+"\n",
 			key, name, name))
@@ -73,6 +72,7 @@ func buildSharedContentFixture(t *testing.T, strip map[int]bool) (string, string
 	if err := os.WriteFile(filepath.Join(corpusDir, "pages.jsonl"), []byte(jsonl.String()), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	writePageTextDB(t, corpusDir, mdByKey)
 	return sourceDir, corpusDir
 }
 
@@ -340,12 +340,13 @@ func buildNoSharedFixture(t *testing.T) (string, string) {
 	for _, d := range []string{
 		filepath.Join(sourceDir, "Manual"),
 		filepath.Join(sourceDir, "ScriptReference"),
-		filepath.Join(corpusDir, "text", "Manual"),
+		corpusDir,
 	} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
+	mdByKey := map[string]string{}
 	var jsonl strings.Builder
 	for p := 0; p < sharedFixturePages; p++ {
 		name := fmt.Sprintf("Shared%02d", p)
@@ -355,9 +356,7 @@ func buildNoSharedFixture(t *testing.T) (string, string) {
 			t.Fatal(err)
 		}
 		md := "---\ntitle: " + name + "\n---\n\n" + uniq + "\n"
-		if err := os.WriteFile(filepath.Join(corpusDir, "text", "Manual", name+".md"), []byte(md), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		mdByKey["Manual/"+name] = md
 		jsonl.WriteString(fmt.Sprintf(
 			`{"page_key":"Manual/%s","section":"Manual","source_rel":"Manual/%s.html","md_rel":"text/Manual/%s.md"}`+"\n",
 			name, name, name))
@@ -365,5 +364,6 @@ func buildNoSharedFixture(t *testing.T) (string, string) {
 	if err := os.WriteFile(filepath.Join(corpusDir, "pages.jsonl"), []byte(jsonl.String()), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	writePageTextDB(t, corpusDir, mdByKey)
 	return sourceDir, corpusDir
 }

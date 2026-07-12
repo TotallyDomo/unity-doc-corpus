@@ -324,6 +324,13 @@ func auditCorpus(source, corpus string, workers int, cfg auditConfig, shared *sh
 		}
 	}
 
+	// The derived Markdown now lives in docs.sqlite (page_text), not on disk under text/. Load it
+	// once, keyed by page_key, so both passes tokenize the exact writeMarkdown bytes.
+	mdByKey, err := loadPageText(corpusAbs)
+	if err != nil {
+		return nil, err
+	}
+
 	// Pass 1: extract reference visible text for every page, cache it, and fold each page's
 	// distinct shingles into the reference document-frequency table. Also read the derived
 	// Markdown and fold its distinct shingles into a second table (mdDF) - the md-DF of a
@@ -349,15 +356,11 @@ func auditCorpus(source, corpus string, workers int, cfg auditConfig, shared *sh
 		for fp := range distinctShingles(tokens, cfg.shingleN) {
 			df.add(fp)
 		}
-		mdPath := filepath.Join(corpusAbs, filepath.FromSlash(pages[i].MDRel))
-		mdRaw, err := os.ReadFile(mdPath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				return fmt.Errorf("missing derived page %s (corpus incomplete - rebuild with: bin/unity-doc-corpus build --source %s --output %s)", mdPath, source, corpus)
-			}
-			return fmt.Errorf("reading %s: %w", mdPath, err)
+		mdRaw, ok := mdByKey[pages[i].PageKey]
+		if !ok {
+			return fmt.Errorf("page %q missing from docs.sqlite page_text (corpus incomplete - rebuild with: bin/unity-doc-corpus build --source %s --output %s)", pages[i].PageKey, source, corpus)
 		}
-		for fp := range distinctShingles(auditTokenize(string(mdRaw)), cfg.shingleN) {
+		for fp := range distinctShingles(auditTokenize(mdRaw), cfg.shingleN) {
 			mdDF.add(fp)
 		}
 		if len(skipped) > 0 {
@@ -392,15 +395,11 @@ func auditCorpus(source, corpus string, workers int, cfg auditConfig, shared *sh
 	var quoteMu sync.Mutex
 	collapsedQuotes := map[uint64]string{}
 	if err := auditParallel(workers, len(pages), func(i int) error {
-		mdPath := filepath.Join(corpusAbs, filepath.FromSlash(pages[i].MDRel))
-		mdRaw, err := os.ReadFile(mdPath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				return fmt.Errorf("missing derived page %s (corpus incomplete - rebuild with: bin/unity-doc-corpus build --source %s --output %s)", mdPath, source, corpus)
-			}
-			return fmt.Errorf("reading %s: %w", mdPath, err)
+		mdRaw, ok := mdByKey[pages[i].PageKey]
+		if !ok {
+			return fmt.Errorf("page %q missing from docs.sqlite page_text (corpus incomplete - rebuild with: bin/unity-doc-corpus build --source %s --output %s)", pages[i].PageKey, source, corpus)
 		}
-		mdTokens := auditTokenize(string(mdRaw))
+		mdTokens := auditTokenize(mdRaw)
 		refTokens := auditTokenize(refJoined[i])
 		refTokCounts[i] = len(refTokens)
 		mdTokCounts[i] = len(mdTokens)
