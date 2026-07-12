@@ -19,7 +19,7 @@ type searchHit struct {
 	Section string
 	PageID  string
 	Title   string
-	MDRel   string
+	PageKey string
 }
 
 // runSearch is the dependency-free lookup path: it runs the same FTS5 query the docs skill
@@ -51,7 +51,7 @@ func runSearch(args []string) {
 		return
 	}
 	for i, h := range hits {
-		fmt.Printf("%2d. [%s] %s\n    %s\n", i+1, h.Section, h.Title, h.MDRel)
+		fmt.Printf("%2d. [%s] %s\n    page %s\n", i+1, h.Section, h.Title, h.PageKey)
 	}
 }
 
@@ -81,7 +81,7 @@ func searchCorpus(corpusDir, query string, limit int) ([]searchHit, error) {
 	// bm25 weights: page_key (unindexed), title, body. Title outweighs body 10:1 - measured
 	// on the reference benchmark, unweighted bm25 buries short canonical pages (a bare class
 	// name ranks the class page below its member pages).
-	const q = `SELECT p.section, p.page_id, p.title, p.md_rel
+	const q = `SELECT p.section, p.page_id, p.title, p.page_key
 FROM pages_fts f JOIN pages p ON p.page_key = f.page_key
 WHERE pages_fts MATCH ?
 ORDER BY bm25(pages_fts, 0.0, 10.0, 1.0) LIMIT ?`
@@ -103,7 +103,7 @@ ORDER BY bm25(pages_fts, 0.0, 10.0, 1.0) LIMIT ?`
 	var hits []searchHit
 	for rows.Next() {
 		var h searchHit
-		if err := rows.Scan(&h.Section, &h.PageID, &h.Title, &h.MDRel); err != nil {
+		if err := rows.Scan(&h.Section, &h.PageID, &h.Title, &h.PageKey); err != nil {
 			return nil, err
 		}
 		hits = append(hits, h)

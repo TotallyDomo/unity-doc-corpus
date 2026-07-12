@@ -54,6 +54,8 @@ type record struct {
 	Title string `json:"title"`
 
 	Body string `json:"-"`
+
+	MD []byte `json:"-"`
 }
 
 type transformJob struct {

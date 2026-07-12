@@ -21,7 +21,7 @@ func buildTestCorpus(t *testing.T, dir string, pages []searchHit, bodies map[str
 		key := p.Section + "/" + p.PageID
 		if _, err := db.Exec(
 			"INSERT INTO pages VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			key, p.Section, p.PageID, p.Title, p.PageID+".html", p.MDRel, "", "", "", 0, 0,
+			key, p.Section, p.PageID, p.Title, p.PageID+".html", "text/"+key+".md", "", "", "", 0, 0,
 		); err != nil {
 			t.Fatalf("insert pages: %v", err)
 		}
@@ -39,8 +39,8 @@ func TestSearchCorpus(t *testing.T) {
 	buildTestCorpus(t,
 		dir,
 		[]searchHit{
-			{Section: "Manual", PageID: "transform-sync", Title: "Optimize transform value syncing", MDRel: "text/Manual/transform-sync.md"},
-			{Section: "ScriptReference", PageID: "Rigidbody", Title: "Rigidbody", MDRel: "text/ScriptReference/Rigidbody.md"},
+			{Section: "Manual", PageID: "transform-sync", Title: "Optimize transform value syncing"},
+			{Section: "ScriptReference", PageID: "Rigidbody", Title: "Rigidbody"},
 		},
 		map[string]string{
 			"transform-sync": "auto sync transforms physics performance",
@@ -74,7 +74,7 @@ func TestSearchCorpusSanitizeRetry(t *testing.T) {
 	dir := t.TempDir()
 	buildTestCorpus(t,
 		dir,
-		[]searchHit{{Section: "Manual", PageID: "not-page", Title: "Do not destroy on load", MDRel: "text/Manual/not-page.md"}},
+		[]searchHit{{Section: "Manual", PageID: "not-page", Title: "Do not destroy on load"}},
 		map[string]string{"not-page": "objects marked do not destroy survive scene loads and reloads"},
 	)
 	cases := []struct {

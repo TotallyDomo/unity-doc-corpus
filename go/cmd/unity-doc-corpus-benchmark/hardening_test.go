@@ -71,13 +71,6 @@ func TestSearchDocsRankingAndCap(t *testing.T) {
 	}
 }
 
-func TestSourceRelFromMarkdownFrontMatter(t *testing.T) {
-	md := "---\nsection: Manual\nsource_rel: Manual/Rigidbody2D.html\ntitle: Rigidbody2D\n---\n\n# Rigidbody2D\n"
-	if got := sourceRelFromMarkdown(md, "/corpus/text/Manual/Rigidbody2D.md", "/corpus"); got != "Manual/Rigidbody2D.html" {
-		t.Errorf("source_rel extraction = %q", got)
-	}
-}
-
 func TestContainsHelpers(t *testing.T) {
 	if !containsHit([]hit{{"a.html", 2}}, "a.html") || containsHit([]hit{{"a.html", 2}}, "z.html") {
 		t.Error("containsHit wrong")

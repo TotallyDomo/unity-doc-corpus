@@ -8,6 +8,7 @@ package main
 // (the transform's normal, deliberate difference) stays unflagged.
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -17,6 +18,37 @@ import (
 	"testing"
 	"unicode/utf8"
 )
+
+// writePageTextDB writes a docs.sqlite under corpusDir holding the page_text table the audit now
+// reads Markdown from (the DB read that replaced the on-disk text/ directory). mdByKey maps
+// page_key -> rendered Markdown.
+func writePageTextDB(t *testing.T, corpusDir string, mdByKey map[string]string) {
+	t.Helper()
+	db, _, err := createSQLite(filepath.Join(corpusDir, "docs.sqlite"))
+	if err != nil {
+		t.Fatalf("createSQLite: %v", err)
+	}
+	defer db.Close()
+	for key, md := range mdByKey {
+		if _, err := db.Exec("INSERT INTO page_text(page_key, md) VALUES (?, ?)", key, md); err != nil {
+			t.Fatalf("insert page_text: %v", err)
+		}
+	}
+}
+
+// setPageTextDB overwrites one page's Markdown in an already-written docs.sqlite - the DB peer of
+// rewriting a single text/*.md file, used to seed a regression into a built fixture.
+func setPageTextDB(t *testing.T, corpusDir, key, md string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", filepath.Join(corpusDir, "docs.sqlite"))
+	if err != nil {
+		t.Fatalf("open docs.sqlite: %v", err)
+	}
+	defer db.Close()
+	if _, err := db.Exec("INSERT OR REPLACE INTO page_text(page_key, md) VALUES (?, ?)", key, md); err != nil {
+		t.Fatalf("update page_text: %v", err)
+	}
+}
 
 // fixtureChrome is the corpus-uniform chrome sentence shared by every fixture page. With
 // fixturePageCount pages it repeats far above max-shingle-df, so its interior shingles are
@@ -54,13 +86,14 @@ func buildAuditFixture(t *testing.T) (string, string) {
 	for _, d := range []string{
 		filepath.Join(sourceDir, "Manual"),
 		filepath.Join(sourceDir, "ScriptReference"),
-		filepath.Join(corpusDir, "text", "Manual"),
+		corpusDir,
 	} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
 
+	mdByKey := map[string]string{}
 	var jsonl strings.Builder
 	for p := 0; p < fixturePageCount; p++ {
 		name := fmt.Sprintf("Page%02d", p)
@@ -106,9 +139,7 @@ func buildAuditFixture(t *testing.T) (string, string) {
 			mdParas = []string{paras[0], paras[2]}
 		}
 		md := "---\ntitle: " + name + "\n---\n\n" + strings.Join(mdParas, "\n\n") + "\n"
-		if err := os.WriteFile(filepath.Join(corpusDir, "text", "Manual", name+".md"), []byte(md), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		mdByKey[key] = md
 
 		jsonl.WriteString(fmt.Sprintf(
 			`{"page_key":%q,"section":"Manual","source_rel":"Manual/%s.html","md_rel":"text/Manual/%s.md"}`+"\n",
@@ -117,6 +148,7 @@ func buildAuditFixture(t *testing.T) (string, string) {
 	if err := os.WriteFile(filepath.Join(corpusDir, "pages.jsonl"), []byte(jsonl.String()), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	writePageTextDB(t, corpusDir, mdByKey)
 	return sourceDir, corpusDir
 }
 
@@ -377,7 +409,7 @@ func TestAuditFlagsLossAfterVoidCloseTag(t *testing.T) {
 	for _, d := range []string{
 		filepath.Join(sourceDir, "Manual"),
 		filepath.Join(sourceDir, "ScriptReference"),
-		filepath.Join(corpusDir, "text", "Manual"),
+		corpusDir,
 	} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
@@ -392,13 +424,11 @@ func TestAuditFlagsLossAfterVoidCloseTag(t *testing.T) {
 		t.Fatal(err)
 	}
 	md := "---\ntitle: VoidClose\n---\n\nVoidClose\n\n" + kept + "\n"
-	if err := os.WriteFile(filepath.Join(corpusDir, "text", "Manual", "VoidClose.md"), []byte(md), 0o644); err != nil {
-		t.Fatal(err)
-	}
 	jsonl := `{"page_key":"Manual/VoidClose","section":"Manual","source_rel":"Manual/VoidClose.html","md_rel":"text/Manual/VoidClose.md"}` + "\n"
 	if err := os.WriteFile(filepath.Join(corpusDir, "pages.jsonl"), []byte(jsonl), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	writePageTextDB(t, corpusDir, map[string]string{"Manual/VoidClose": md})
 
 	res, err := auditCorpus(sourceDir, corpusDir, 2, fixtureAuditConfig(), nil)
 	if err != nil {
@@ -540,10 +570,7 @@ func TestAuditBaselineGatesFixtureRun(t *testing.T) {
 
 	// Blind-E2E probe replay (findings item 1): gut a BASELINED page's markdown body - its
 	// flag must escape the baseline and gate, not hide behind its page key.
-	gutted := filepath.Join(corpusDir, "text", "Manual", "TailTruncated.md")
-	if err := os.WriteFile(gutted, []byte("---\ntitle: TailTruncated\n---\n\nTailTruncated\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	setPageTextDB(t, corpusDir, fixtureTruncated, "---\ntitle: TailTruncated\n---\n\nTailTruncated\n")
 	res2, err := auditCorpus(sourceDir, corpusDir, 4, fixtureAuditConfig(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -698,7 +725,7 @@ func TestAuditRatioGateCatchesBlankedDuplicate(t *testing.T) {
 	for _, d := range []string{
 		filepath.Join(sourceDir, "Manual"),
 		filepath.Join(sourceDir, "ScriptReference"),
-		filepath.Join(corpusDir, "text", "Manual"),
+		corpusDir,
 	} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
@@ -712,6 +739,7 @@ func TestAuditRatioGateCatchesBlankedDuplicate(t *testing.T) {
 		shared[i] = fmt.Sprintf("dupfam%d", i)
 	}
 	body := strings.Join(shared, " ")
+	mdByKey := map[string]string{}
 	var jsonl strings.Builder
 	for p := 0; p < 5; p++ {
 		name := fmt.Sprintf("Dup%02d", p)
@@ -723,9 +751,7 @@ func TestAuditRatioGateCatchesBlankedDuplicate(t *testing.T) {
 		if p == 3 {
 			md = "" // the blanked family member
 		}
-		if err := os.WriteFile(filepath.Join(corpusDir, "text", "Manual", name+".md"), []byte(md), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		mdByKey["Manual/"+name] = md
 		jsonl.WriteString(fmt.Sprintf(
 			`{"page_key":"Manual/%s","section":"Manual","source_rel":"Manual/%s.html","md_rel":"text/Manual/%s.md"}`+"\n",
 			name, name, name))
@@ -733,6 +759,7 @@ func TestAuditRatioGateCatchesBlankedDuplicate(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(corpusDir, "pages.jsonl"), []byte(jsonl.String()), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	writePageTextDB(t, corpusDir, mdByKey)
 	res, err := auditCorpus(sourceDir, corpusDir, 2, fixtureAuditConfig(), nil)
 	if err != nil {
 		t.Fatal(err)

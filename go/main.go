@@ -13,6 +13,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  unity-doc-corpus fetch  --version <ver> [--destination <dir>] [--cache-root <dir>] [--workers N] [--force] [--delete-zip] [--resolve-only]")
 	fmt.Fprintln(os.Stderr, "  unity-doc-corpus build  --source <docs-root> --output <agent-output> [--workers N] [--keep-source]")
 	fmt.Fprintln(os.Stderr, "  unity-doc-corpus search [--corpus <agent-output>] [--limit N] <query>")
+	fmt.Fprintln(os.Stderr, "  unity-doc-corpus page   [--corpus <agent-output>] <page_key>")
 	fmt.Fprintln(os.Stderr, "  unity-doc-corpus source [--source <docs-root>] <source_rel>")
 	fmt.Fprintln(os.Stderr, "  unity-doc-corpus audit  [--source <docs-root>] [--corpus <agent-output>] [--output report.json] [--baseline base.json] [--write-baseline base.json] [--shared-baseline shared.json] [--write-shared-baseline shared.json] [--workers N]")
 }
@@ -29,6 +30,8 @@ func main() {
 		runFetch(os.Args[2:])
 	case "search":
 		runSearch(os.Args[2:])
+	case "page":
+		runPage(os.Args[2:])
 	case "source":
 		runSource(os.Args[2:])
 	case "audit":

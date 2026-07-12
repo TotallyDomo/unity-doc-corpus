@@ -134,33 +134,34 @@ func loadSourceDocs(source string) ([]doc, error) {
 	return docs, nil
 }
 
-func sourceRelFromMarkdown(text, path, corpus string) string {
-	re := regexp.MustCompile(`(?m)^source_rel:\s*(.+)$`)
-	match := re.FindStringSubmatch(text)
-	if len(match) == 2 {
-		return strings.TrimSpace(match[1])
-	}
-	rel, _ := filepath.Rel(filepath.Join(corpus, "text"), path)
-	return filepath.ToSlash(rel)
-}
-
+// loadDerivedDocs reads the derived Markdown for the naive-scan-over-derived lane from the
+// corpus docs.sqlite (the page_text table joined to pages for the source path) - the DB read
+// that replaced walking a text/ directory of .md files. The Markdown is the byte-identical
+// writeMarkdown output, so recall is unchanged from the file-backed lane.
 func loadDerivedDocs(corpus string) ([]doc, error) {
-	root := filepath.Join(corpus, "text")
+	db, err := sql.Open("sqlite", filepath.Join(corpus, "docs.sqlite"))
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	rows, err := db.Query("SELECT p.source_rel, pt.md FROM page_text pt JOIN pages p ON p.page_key = pt.page_key")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 	var docs []doc
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.EqualFold(filepath.Ext(path), ".md") {
-			return err
+	for rows.Next() {
+		var sourceRel, md string
+		if err := rows.Scan(&sourceRel, &md); err != nil {
+			return nil, err
 		}
-		text, err := readText(path)
-		if err != nil {
-			return err
-		}
-		rel, _ := filepath.Rel(corpus, path)
-		docs = append(docs, doc{SourceRel: sourceRelFromMarkdown(text, path, corpus), DisplayRel: filepath.ToSlash(rel), Text: strings.ToLower(text), Bytes: len(text)})
-		return nil
-	})
+		docs = append(docs, doc{SourceRel: sourceRel, DisplayRel: sourceRel, Text: strings.ToLower(md), Bytes: len(md)})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	sort.Slice(docs, func(i, j int) bool { return docs[i].SourceRel < docs[j].SourceRel })
-	return docs, err
+	return docs, nil
 }
 
 func searchDocs(docs []doc, terms []string) ([]hit, time.Duration, int) {
