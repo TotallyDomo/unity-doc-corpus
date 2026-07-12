@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 )
 
 // sharedBaseline pins the CONTENT-classified shingle set of a known-good corpus. The
@@ -124,6 +125,30 @@ func loadSharedBaseline(path string) (*sharedBaseline, error) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	return &b, nil
+}
+
+// configMismatch reports how the manifest's recorded shingle geometry differs from the active
+// run, or "" when they agree. This matters because the pinned fingerprints are width-shingleN
+// hashes classified against (max_shingle_df, content_min_df): audited under a different
+// --shingle-n, every pinned fingerprint's document frequency reads as 0, so sharedCollapsed
+// finds nothing and the Part B gate silently passes regardless of real loss - the exact
+// silent-no-op class this master exists to prevent. The audit already refuses rather than
+// certifies on a page-count mismatch or a malformed record; a config-mismatched manifest is the
+// same kind of "cannot apply, so do not pretend to" and must refuse too. A recorded field of 0
+// predates the field (no such manifest ships, but hand-authored ones might) and is not checked,
+// degrading to the prior behavior rather than hard-failing.
+func (b *sharedBaseline) configMismatch(cfg auditConfig) string {
+	var diffs []string
+	if b.ShingleN != 0 && b.ShingleN != cfg.shingleN {
+		diffs = append(diffs, fmt.Sprintf("shingle-n manifest=%d run=%d", b.ShingleN, cfg.shingleN))
+	}
+	if b.MaxShingleDF != 0 && b.MaxShingleDF != int(cfg.maxDF) {
+		diffs = append(diffs, fmt.Sprintf("max-shingle-df manifest=%d run=%d", b.MaxShingleDF, cfg.maxDF))
+	}
+	if b.ContentMinDF != 0 && b.ContentMinDF != cfg.contentMinDF {
+		diffs = append(diffs, fmt.Sprintf("content-min-df manifest=%d run=%d", b.ContentMinDF, cfg.contentMinDF))
+	}
+	return strings.Join(diffs, ", ")
 }
 
 // buildContentShingles returns the content-classified high-ref-DF shingle set: shared in the
