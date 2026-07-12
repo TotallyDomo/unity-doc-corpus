@@ -118,7 +118,9 @@ seconds, and gates on a checked-in baseline of individually triaged false positi
 ([audit-baseline-6000.3.json](audit-baseline-6000.3.json) - 496 pages, one known
 footer-adjacency class), so only new flags fail a run. Baseline entries pin each accepted
 page's flag magnitude and the corpus page count, so an accepted page that worsens - or a
-corpus that quietly shrinks - re-gates instead of hiding behind its allowlist entry. The
+corpus that quietly shrinks - re-gates instead of hiding behind its allowlist entry. A
+second, optional `--shared-baseline` manifest extends the guard to corpus-common shared
+content (see the false-negative note below). The
 guard exists because the invariant silently failed once: a parser depth-tracking bug
 (fixed 2026-07-09) truncated entire sections while the unit tests, the recall benchmark,
 and the opt-in per-page verify step all stayed green.
@@ -132,11 +134,19 @@ tree.** That is a strong new-regression detector, not a mathematical lossless pr
 known false-negative classes, stated with the same candor as the false-positive floor
 above (established by an independent adversarial evaluation, 2026-07-12):
 
-- **Corpus-common content.** A shingle repeated on more than a handful of pages (shared
-  boilerplate sentences like the `hideFlags` description) is by definition not
-  page-unique, so a class-wide transform regression that strips such a sentence from
-  every page it appears on passes the page-local check. Corpus-level detection of this
-  class is planned work.
+- **Corpus-common content (now detected, M0042-S6).** A shingle repeated on more than a
+  handful of pages (shared boilerplate sentences like the `hideFlags` description, on 327
+  pages) is by definition not page-unique, so the page-local check ignores it. This class
+  is now caught by discriminating shared *content* from chrome via the shingle's
+  derived-Markdown document frequency (mdDF): the two populations are sharply bimodal
+  (measured on the clean corpus - 90.5% content at mdDF ~ refDF, 9.5% chrome at mdDF 0,
+  0.05% ambiguous). A high-ref-DF shingle that is present across the Markdown broadly but
+  missing from one page is a miss (live, no extra state; catches a partial strip). A
+  *total* corpus-wide strip drops the shingle's mdDF to 0, which is indistinguishable from
+  chrome without a recorded prior, so it is caught against an optional shared-content
+  manifest (`--shared-baseline`
+  [shared-content-baseline-6000.3.json](shared-content-baseline-6000.3.json)): a pinned
+  shingle still shared in the source HTML but vanished from the Markdown gates the run.
 - **Word-token granularity.** Both sides tokenize to letter/digit runs, so punctuation,
   operators, and signs are invisible to the invariant: `return -1` degrading to
   `return 1` does not flag. "Lossless" throughout this document means

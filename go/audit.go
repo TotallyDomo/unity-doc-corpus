@@ -37,9 +37,12 @@ package main
 // What the gate does NOT prove - the documented false-negative classes, the mirror of the FP
 // candor above (blind E2E validation, 2026-07-12; see docs/DESIGN.md):
 //   - Corpus-common content: a shingle repeated on more than max-shingle-df pages (shared
-//     sentences like the hideFlags description, on 327 pages) is not page-unique, so a
-//     class-wide transform regression stripping it from every page passes the page-local
-//     check. Corpus-level detection is planned (M0042-S6).
+//     sentences like the hideFlags description, on 327 pages) is not page-unique. This class is
+//     now DETECTED (M0042-S6, audit_shared.go): the derived-Markdown document frequency (mdDF)
+//     separates shared CONTENT from chrome, so a high-ref-DF shingle missing from a page still
+//     present broadly is a miss (Part A, live), and a --shared-baseline manifest catches a
+//     total corpus-wide strip that drops mdDF to 0 (Part B) - the only case a single run cannot
+//     see, because a totally stripped shingle is indistinguishable from chrome without a prior.
 //   - Word-token granularity: tokens are letter/digit runs, so punctuation, operators, and
 //     signs are invisible ("return -1" vs "return 1" does not flag). "Lossless" here always
 //     means word-token-lossless.
@@ -65,13 +68,14 @@ import (
 )
 
 type auditConfig struct {
-	shingleN    int
-	maxDF       uint32
-	minRun      int
-	ratioFactor float64
-	ratioGate   float64
-	ratioMinTok int
-	maxQuotes   int
+	shingleN     int
+	maxDF        uint32
+	minRun       int
+	contentMinDF int
+	ratioFactor  float64
+	ratioGate    float64
+	ratioMinTok  int
+	maxQuotes    int
 }
 
 type pageRef struct {
@@ -112,6 +116,11 @@ type auditResult struct {
 	ratioOnly   int
 	skipped     map[string]int
 	elapsed     time.Duration
+
+	// Shared-content (corpus-common) detection (M0042-S6, audit_shared.go).
+	contentShingles map[uint64]struct{} // content-classified high-ref-DF set, for --write-shared-baseline
+	sharedLoss      int                 // manifest shingles that collapsed in the derived Markdown
+	sharedQuotes    []string            // human-readable samples of the collapsed shared content
 }
 
 // dfCounter is a sharded fingerprint->document-frequency table. Sharding by the low byte of
@@ -155,6 +164,7 @@ func runAudit(args []string) {
 	workers := fs.Int("workers", 0, "Worker count. Defaults to half of logical CPUs.")
 	shingleN := fs.Int("shingle-n", 5, "Shingle width in words.")
 	maxDF := fs.Int("max-shingle-df", 4, "Max corpus document frequency for a shingle to count as page-unique content.")
+	contentMinDF := fs.Int("content-min-df", 5, "Min derived-Markdown document frequency for a high-ref-DF shingle to count as SHARED CONTENT (present in the Markdown broadly) rather than chrome. A high-ref-DF shingle missing from a page is a content-loss miss when it is content, ignored when it is chrome (md-DF below this).")
 	minRun := fs.Int("min-run", 0, "Minimum run of consecutive missing page-unique shingles to flag a page; 0 = shingle width n. Tight by construction: a boundary between kept content and a stripped corpus-uniform chrome island produces exactly n-1 missing windows, so losing even one INTERIOR content token (>= n missing windows) is the smallest thing that clears the bar; a loss shorter than the bar hard against the stream's start or end can fall under it.")
 	ratioFactor := fs.Float64("ratio-factor", 0.4, "Advisory ratio-outlier threshold: flag pages whose derived/reference token ratio is below section median times this.")
 	ratioGate := fs.Float64("ratio-gate-factor", 0.25, "Gating ratio-collapse threshold: a page whose derived/reference token ratio falls below section median times this counts as content loss and gates the exit (baseline-coverable). 0 disables.")
@@ -162,24 +172,27 @@ func runAudit(args []string) {
 	maxQuotes := fs.Int("max-quotes", 5, "Max quoted missing-text spans to report per flagged page.")
 	baseline := fs.String("baseline", "", "Baseline allowlist JSON of accepted content-loss page keys. With it, exit is zero iff every content-loss flag is baselined; only NEW flags gate.")
 	writeBaseline := fs.String("write-baseline", "", "Write this run's content-loss page keys as a baseline allowlist JSON and exit zero (explicit acceptance of the current flag set).")
+	sharedBaselinePath := fs.String("shared-baseline", "", "Shared-content manifest JSON (see --write-shared-baseline). With it, the run gates when a pinned shared-content shingle has collapsed in the derived Markdown - a corpus-wide shared-content strip the page-local check cannot see.")
+	writeSharedBaseline := fs.String("write-shared-baseline", "", "Write this run's content-classified shingle set as a shared-content manifest JSON and exit zero (explicit acceptance of the current shared content).")
 	_ = fs.Parse(args)
 
 	if *shingleN < 1 {
 		fmt.Fprintln(os.Stderr, "error: --shingle-n must be >= 1")
 		os.Exit(2)
 	}
-	if *maxDF < 0 || *maxQuotes < 0 || *ratioFactor < 0 || *ratioGate < 0 || *ratioMinTok < 0 || *minRun < 0 {
-		fmt.Fprintln(os.Stderr, "error: --max-shingle-df, --max-quotes, --ratio-factor, --ratio-gate-factor, --ratio-min-tokens, and --min-run must not be negative")
+	if *maxDF < 0 || *maxQuotes < 0 || *ratioFactor < 0 || *ratioGate < 0 || *ratioMinTok < 0 || *minRun < 0 || *contentMinDF < 0 {
+		fmt.Fprintln(os.Stderr, "error: --max-shingle-df, --content-min-df, --max-quotes, --ratio-factor, --ratio-gate-factor, --ratio-min-tokens, and --min-run must not be negative")
 		os.Exit(2)
 	}
 	cfg := auditConfig{
-		shingleN:    *shingleN,
-		maxDF:       uint32(*maxDF),
-		minRun:      *minRun,
-		ratioFactor: *ratioFactor,
-		ratioGate:   *ratioGate,
-		ratioMinTok: *ratioMinTok,
-		maxQuotes:   *maxQuotes,
+		shingleN:     *shingleN,
+		maxDF:        uint32(*maxDF),
+		minRun:       *minRun,
+		contentMinDF: *contentMinDF,
+		ratioFactor:  *ratioFactor,
+		ratioGate:    *ratioGate,
+		ratioMinTok:  *ratioMinTok,
+		maxQuotes:    *maxQuotes,
 	}
 	if cfg.minRun < 1 {
 		cfg.minRun = cfg.shingleN
@@ -188,7 +201,17 @@ func runAudit(args []string) {
 		*workers = defaultWorkers()
 	}
 
-	res, err := auditCorpus(*source, *corpus, *workers, cfg)
+	var shared *sharedBaseline
+	if *sharedBaselinePath != "" {
+		s, err := loadSharedBaseline(*sharedBaselinePath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		shared = s
+	}
+
+	res, err := auditCorpus(*source, *corpus, *workers, cfg, shared)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
@@ -205,31 +228,48 @@ func runAudit(args []string) {
 	newFlags, stale := applyAuditBaseline(res.flagged, base)
 	shrunk := baselinePageShrink(base, len(res.pages))
 
-	printAuditReport(os.Stdout, res, base, newFlags, stale, shrunk, cfg)
+	printAuditReport(os.Stdout, res, base, shared, newFlags, stale, shrunk, cfg)
 	if *output != "" {
-		if err := writeAuditJSON(*output, res, base, newFlags, stale, shrunk, cfg); err != nil {
+		if err := writeAuditJSON(*output, res, base, shared, newFlags, stale, shrunk, cfg); err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
 		fmt.Fprintln(os.Stderr, "Wrote JSON report:", *output)
 	}
+	wrote := false
 	if *writeBaseline != "" {
 		if err := writeAuditBaseline(*writeBaseline, res); err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
 		fmt.Fprintln(os.Stderr, "Wrote baseline:", *writeBaseline)
-		// Writing a baseline IS the acceptance of the current flag set: exit zero.
+		wrote = true
+	}
+	if *writeSharedBaseline != "" {
+		if err := writeSharedBaselineFile(*writeSharedBaseline, res, cfg); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		fmt.Fprintf(os.Stderr, "Wrote shared-content manifest: %s (%d content shingles)\n", *writeSharedBaseline, len(res.contentShingles))
+		wrote = true
+	}
+	// Writing a baseline IS the acceptance of the current state: exit zero.
+	if wrote {
 		return
 	}
-	// Gating flags outside the baseline (or a shrunken page count) fail the run; plain ratio
-	// outliers are advisory.
-	if newFlags > 0 || shrunk > 0 {
+	// Gating flags outside the baseline, a shrunken page count, or a collapsed shared-content
+	// shingle fail the run; plain ratio outliers are advisory.
+	if newFlags > 0 || shrunk > 0 || res.sharedLoss > 0 {
 		os.Exit(1)
 	}
 }
 
-func auditCorpus(source, corpus string, workers int, cfg auditConfig) (*auditResult, error) {
+// writeSharedBaselineFile writes the run's content-classified shingle set as a manifest.
+func writeSharedBaselineFile(path string, res *auditResult, cfg auditConfig) error {
+	return writeSharedBaseline(path, res.contentShingles, cfg)
+}
+
+func auditCorpus(source, corpus string, workers int, cfg auditConfig, shared *sharedBaseline) (*auditResult, error) {
 	start := time.Now()
 	sourceAbs, _ := filepath.Abs(source)
 	corpusAbs, _ := filepath.Abs(corpus)
@@ -263,9 +303,13 @@ func auditCorpus(source, corpus string, workers int, cfg auditConfig) (*auditRes
 	}
 
 	// Pass 1: extract reference visible text for every page, cache it, and fold each page's
-	// distinct shingles into the corpus document-frequency table.
+	// distinct shingles into the reference document-frequency table. Also read the derived
+	// Markdown and fold its distinct shingles into a second table (mdDF) - the md-DF of a
+	// high-ref-DF shingle is what separates shared CONTENT (present in the Markdown broadly)
+	// from chrome (absent by design), the discrimination the shared-content check turns on.
 	refJoined := make([]string, len(pages))
 	df := newDFCounter()
+	mdDF := newDFCounter()
 	var skipMu sync.Mutex
 	skippedTotals := map[string]int{}
 	if err := auditParallel(workers, len(pages), func(i int) error {
@@ -283,6 +327,17 @@ func auditCorpus(source, corpus string, workers int, cfg auditConfig) (*auditRes
 		for fp := range distinctShingles(tokens, cfg.shingleN) {
 			df.add(fp)
 		}
+		mdPath := filepath.Join(corpusAbs, filepath.FromSlash(pages[i].MDRel))
+		mdRaw, err := os.ReadFile(mdPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("missing derived page %s (corpus incomplete - rebuild with: bin/unity-doc-corpus build --source %s --output %s)", mdPath, source, corpus)
+			}
+			return fmt.Errorf("reading %s: %w", mdPath, err)
+		}
+		for fp := range distinctShingles(auditTokenize(string(mdRaw)), cfg.shingleN) {
+			mdDF.add(fp)
+		}
 		if len(skipped) > 0 {
 			skipMu.Lock()
 			for k, v := range skipped {
@@ -295,12 +350,25 @@ func auditCorpus(source, corpus string, workers int, cfg auditConfig) (*auditRes
 		return nil, err
 	}
 
-	// Pass 2: for every page, check that each page-unique reference shingle is present in the
-	// derived Markdown; collect runs of consecutive misses as content-loss flags.
+	// The content-classified shingle set (shared in source, present in the Markdown broadly)
+	// backs --write-shared-baseline. When a shared-content manifest is supplied, the collapsed
+	// set is the pinned shingles that are still shared upstream but have vanished downstream.
+	contentShingles := buildContentShingles(df, mdDF, cfg)
+	var collapsed map[uint64]struct{}
+	if shared != nil {
+		collapsed = sharedCollapsed(shared, df, mdDF, cfg)
+	}
+
+	// Pass 2: for every page, check that each page-unique OR shared-content reference shingle is
+	// present in the derived Markdown; collect runs of consecutive misses as content-loss flags.
+	// While here, when a shared-content manifest supplied a collapsed set, capture a readable
+	// quote for each collapsed shingle from the reference stream that still carries it.
 	flags := make([]*auditFlag, len(pages))
 	ratios := make([]float64, len(pages))
 	refTokCounts := make([]int, len(pages))
 	mdTokCounts := make([]int, len(pages))
+	var quoteMu sync.Mutex
+	collapsedQuotes := map[uint64]string{}
 	if err := auditParallel(workers, len(pages), func(i int) error {
 		mdPath := filepath.Join(corpusAbs, filepath.FromSlash(pages[i].MDRel))
 		mdRaw, err := os.ReadFile(mdPath)
@@ -317,13 +385,16 @@ func auditCorpus(source, corpus string, workers int, cfg auditConfig) (*auditRes
 		if len(refTokens) > 0 {
 			ratios[i] = float64(len(mdTokens)) / float64(len(refTokens))
 		}
-		flags[i] = auditPage(pages[i], refTokens, mdTokens, df, cfg)
+		flags[i] = auditPage(pages[i], refTokens, mdTokens, df, mdDF, cfg)
 		if flags[i] != nil {
 			flags[i].RefTokens = len(refTokens)
 			flags[i].MDTokens = len(mdTokens)
 			if len(refTokens) > 0 {
 				flags[i].Ratio = ratios[i]
 			}
+		}
+		if len(collapsed) > 0 {
+			collectCollapsedQuotes(refTokens, collapsed, cfg.shingleN, &quoteMu, collapsedQuotes)
 		}
 		return nil
 	}); err != nil {
@@ -351,14 +422,43 @@ func auditCorpus(source, corpus string, workers int, cfg auditConfig) (*auditRes
 		}
 	}
 
+	var sharedQuotes []string
+	for _, q := range collapsedQuotes {
+		sharedQuotes = append(sharedQuotes, q)
+	}
+	sort.Strings(sharedQuotes)
+	if cfg.maxQuotes >= 0 && len(sharedQuotes) > cfg.maxQuotes {
+		sharedQuotes = sharedQuotes[:cfg.maxQuotes]
+	}
+
 	return &auditResult{
-		pages:       pages,
-		flagged:     flagged,
-		contentLoss: contentLoss,
-		ratioOnly:   ratioOnly,
-		skipped:     skippedTotals,
-		elapsed:     time.Since(start),
+		pages:           pages,
+		flagged:         flagged,
+		contentLoss:     contentLoss,
+		ratioOnly:       ratioOnly,
+		skipped:         skippedTotals,
+		elapsed:         time.Since(start),
+		contentShingles: contentShingles,
+		sharedLoss:      len(collapsed),
+		sharedQuotes:    sharedQuotes,
 	}, nil
+}
+
+// collectCollapsedQuotes scans a page's reference tokens for windows whose fingerprint is in
+// the collapsed set and records one readable quote per collapsed shingle (first occurrence
+// wins). Only called when the collapsed set is non-empty, so clean runs pay nothing.
+func collectCollapsedQuotes(refTokens []string, collapsed map[uint64]struct{}, n int, mu *sync.Mutex, out map[uint64]string) {
+	for k := 0; k+n <= len(refTokens); k++ {
+		fp := shingleFingerprint(refTokens[k : k+n])
+		if _, ok := collapsed[fp]; !ok {
+			continue
+		}
+		mu.Lock()
+		if _, seen := out[fp]; !seen {
+			out[fp] = clip(strings.Join(refTokens[k:k+n], " "))
+		}
+		mu.Unlock()
+	}
 }
 
 // auditBaselineDescription is written into every baseline file so the file explains itself.
@@ -509,16 +609,35 @@ func countSectionHTML(sourceAbs string) (int, error) {
 }
 
 // auditPage checks one page and returns a flag if it has a qualifying run of missing
-// page-unique shingles, else nil. refTokens/mdTokens are the two token streams.
-func auditPage(p pageRef, refTokens, mdTokens []string, df *dfCounter, cfg auditConfig) *auditFlag {
+// checkable shingles, else nil. refTokens/mdTokens are the two token streams; df/mdDF are the
+// corpus reference and derived-Markdown document-frequency tables (mdDF may be nil in unit
+// tests that exercise only page-unique shingles).
+//
+// A reference shingle is CHECKABLE (must appear in the Markdown) when it is page-unique
+// (ref-DF <= max-df) OR shared CONTENT (ref-DF > max-df AND md-DF >= content-min-df, i.e. it is
+// present across the Markdown broadly, not stripped chrome). Only CHROME (high ref-DF, low
+// md-DF) is ignored - the same corpus-uniform chrome the frequency step always dropped, now
+// pinned down by its md-DF instead of by ref-DF alone.
+func auditPage(p pageRef, refTokens, mdTokens []string, df, mdDF *dfCounter, cfg auditConfig) *auditFlag {
 	if len(refTokens) == 0 {
 		return nil
+	}
+	mdGet := func(fp uint64) uint32 {
+		if mdDF == nil {
+			return 0
+		}
+		return mdDF.get(fp)
+	}
+	// isChrome: a high-ref-DF shingle that is NOT present in the Markdown broadly - stripped by
+	// design, so its absence from a page is not a loss.
+	isChrome := func(fp uint64) bool {
+		return df.get(fp) > cfg.maxDF && mdGet(fp) < uint32(cfg.contentMinDF)
 	}
 	// Short page: the whole token stream is one shingle; the n-gram set does not apply, so
 	// check membership as a direct subsequence of the Markdown tokens.
 	if len(refTokens) < cfg.shingleN {
 		fp := shingleFingerprint(refTokens)
-		if df.get(fp) <= cfg.maxDF && !containsSubsequence(mdTokens, refTokens) {
+		if !isChrome(fp) && !containsSubsequence(mdTokens, refTokens) {
 			return &auditFlag{
 				PageKey: p.PageKey, Section: p.Section, SourceRel: p.SourceRel, MDRel: p.MDRel,
 				MissingWindow: 1, MissingSpans: 1,
@@ -530,8 +649,8 @@ func auditPage(p pageRef, refTokens, mdTokens []string, df *dfCounter, cfg audit
 
 	mdSet := distinctShingles(mdTokens, cfg.shingleN)
 
-	// missing[k] is true when the shingle starting at ref token k is page-unique yet absent
-	// from the Markdown. Runs of consecutive true values are content-loss spans.
+	// missing[k] is true when the shingle starting at ref token k is checkable yet absent from
+	// the Markdown. Runs of consecutive true values are content-loss spans.
 	windowCount := len(refTokens) - cfg.shingleN + 1
 	var spans [][2]int // [startTok, endTokExclusive) of each qualifying run
 	missingWindows := 0
@@ -548,8 +667,8 @@ func auditPage(p pageRef, refTokens, mdTokens []string, df *dfCounter, cfg audit
 	}
 	for k := 0; k < windowCount; k++ {
 		fp := shingleFingerprint(refTokens[k : k+cfg.shingleN])
-		if _, ok := mdSet[fp]; ok || df.get(fp) > cfg.maxDF {
-			// Present, or not page-unique: ends any open run.
+		if _, ok := mdSet[fp]; ok || isChrome(fp) {
+			// Present, or chrome (stripped by design): ends any open run.
 			closeRun(k - 1)
 			continue
 		}
@@ -732,11 +851,11 @@ func auditParallel(workers, count int, fn func(i int) error) error {
 	return firstErr
 }
 
-func printAuditReport(w *os.File, res *auditResult, base *auditBaseline, newFlags, stale, shrunk int, cfg auditConfig) {
+func printAuditReport(w *os.File, res *auditResult, base *auditBaseline, shared *sharedBaseline, newFlags, stale, shrunk int, cfg auditConfig) {
 	fmt.Fprintf(w, "Content-lossless audit: %d pages, %d gating flags, %d advisory ratio outliers (%.1fs)\n",
 		len(res.pages), res.contentLoss, res.ratioOnly, res.elapsed.Seconds())
-	fmt.Fprintf(w, "Config: shingle-n=%d max-shingle-df=%d min-run=%d ratio-factor=%.2f ratio-gate-factor=%.2f\n",
-		cfg.shingleN, cfg.maxDF, cfg.minRun, cfg.ratioFactor, cfg.ratioGate)
+	fmt.Fprintf(w, "Config: shingle-n=%d max-shingle-df=%d content-min-df=%d min-run=%d ratio-factor=%.2f ratio-gate-factor=%.2f\n",
+		cfg.shingleN, cfg.maxDF, cfg.contentMinDF, cfg.minRun, cfg.ratioFactor, cfg.ratioGate)
 	fmt.Fprintf(w, "Chrome dropped (ref tokens): %s\n", formatSkipped(res.skipped))
 	if base != nil {
 		fmt.Fprintf(w, "Baseline: %d baselined (known exceptions), %d new, %d stale baseline entries\n",
@@ -747,6 +866,16 @@ func printAuditReport(w *os.File, res *auditResult, base *auditBaseline, newFlag
 		if shrunk > 0 {
 			fmt.Fprintf(w, "PAGE COUNT SHRANK: corpus has %d pages, baseline recorded %d (%d lost) - gating\n",
 				len(res.pages), base.PageCount, shrunk)
+		}
+	}
+	if shared != nil {
+		if res.sharedLoss == 0 {
+			fmt.Fprintf(w, "Shared-content: %d shingles pinned, 0 collapsed\n", len(shared.set))
+		} else {
+			fmt.Fprintf(w, "SHARED-CONTENT LOSS: %d pinned shingles are still shared in the source but vanished from the Markdown - gating\n", res.sharedLoss)
+			for _, q := range res.sharedQuotes {
+				fmt.Fprintf(w, "    missing (shared): %q\n", q)
+			}
 		}
 	}
 	fmt.Fprintln(w)
@@ -786,7 +915,7 @@ func printAuditReport(w *os.File, res *auditResult, base *auditBaseline, newFlag
 	}
 }
 
-func writeAuditJSON(path string, res *auditResult, base *auditBaseline, newFlags, stale, shrunk int, cfg auditConfig) error {
+func writeAuditJSON(path string, res *auditResult, base *auditBaseline, shared *sharedBaseline, newFlags, stale, shrunk int, cfg auditConfig) error {
 	report := map[string]any{
 		"page_count":              len(res.pages),
 		"content_loss_flag_count": res.contentLoss,
@@ -795,6 +924,7 @@ func writeAuditJSON(path string, res *auditResult, base *auditBaseline, newFlags
 		"config": map[string]any{
 			"shingle_n":         cfg.shingleN,
 			"max_shingle_df":    cfg.maxDF,
+			"content_min_df":    cfg.contentMinDF,
 			"min_run":           cfg.minRun,
 			"ratio_factor":      cfg.ratioFactor,
 			"ratio_gate_factor": cfg.ratioGate,
@@ -808,6 +938,11 @@ func writeAuditJSON(path string, res *auditResult, base *auditBaseline, newFlags
 		report["new_content_loss_flag_count"] = newFlags
 		report["stale_baseline_count"] = stale
 		report["baseline_page_shrink"] = shrunk
+	}
+	if shared != nil {
+		report["shared_content_pinned"] = len(shared.set)
+		report["shared_content_loss_count"] = res.sharedLoss
+		report["shared_content_loss_samples"] = res.sharedQuotes
 	}
 	if res.flagged == nil {
 		report["flagged"] = []*auditFlag{}

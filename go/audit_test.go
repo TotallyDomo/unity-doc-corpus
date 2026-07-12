@@ -120,14 +120,14 @@ func buildAuditFixture(t *testing.T) (string, string) {
 }
 
 func fixtureAuditConfig() auditConfig {
-	return auditConfig{shingleN: 5, maxDF: 4, minRun: 5, ratioFactor: 0.4, ratioGate: 0.25, ratioMinTok: 30, maxQuotes: 5}
+	return auditConfig{shingleN: 5, maxDF: 4, minRun: 5, contentMinDF: 5, ratioFactor: 0.4, ratioGate: 0.25, ratioMinTok: 30, maxQuotes: 5}
 }
 
 // runFixtureAudit audits the synthetic corpus and returns the flags keyed by page.
 func runFixtureAudit(t *testing.T) map[string]*auditFlag {
 	t.Helper()
 	sourceDir, corpusDir := buildAuditFixture(t)
-	res, err := auditCorpus(sourceDir, corpusDir, 4, fixtureAuditConfig())
+	res, err := auditCorpus(sourceDir, corpusDir, 4, fixtureAuditConfig(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -366,7 +366,7 @@ func TestAuditFlagsLossAfterVoidCloseTag(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := auditCorpus(sourceDir, corpusDir, 2, fixtureAuditConfig())
+	res, err := auditCorpus(sourceDir, corpusDir, 2, fixtureAuditConfig(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -394,7 +394,7 @@ func TestAuditPageQuoteCoversFullSpan(t *testing.T) {
 	for fp := range distinctShingles(ref, cfg.shingleN) {
 		df.add(fp)
 	}
-	f := auditPage(pageRef{PageKey: "Manual/Tail"}, ref, md, df, cfg)
+	f := auditPage(pageRef{PageKey: "Manual/Tail"}, ref, md, df, nil, cfg)
 	if f == nil || f.MissingSpans == 0 {
 		t.Fatalf("tail drop not flagged: %+v", f)
 	}
@@ -407,7 +407,7 @@ func TestAuditPageQuoteCoversFullSpan(t *testing.T) {
 // audit must answer with the rematerialization command, not a bare stat error.
 func TestAuditCorpusMissingSourceSection(t *testing.T) {
 	_, corpusDir := buildAuditFixture(t)
-	_, err := auditCorpus(t.TempDir(), corpusDir, 1, fixtureAuditConfig())
+	_, err := auditCorpus(t.TempDir(), corpusDir, 1, fixtureAuditConfig(), nil)
 	if err == nil {
 		t.Fatal("missing section dirs must error")
 	}
@@ -423,7 +423,7 @@ func TestAuditCorpusMissingSourcePage(t *testing.T) {
 	if err := os.Remove(filepath.Join(sourceDir, "Manual", "Page00.html")); err != nil {
 		t.Fatal(err)
 	}
-	_, err := auditCorpus(sourceDir, corpusDir, 2, fixtureAuditConfig())
+	_, err := auditCorpus(sourceDir, corpusDir, 2, fixtureAuditConfig(), nil)
 	if err == nil {
 		t.Fatal("missing source page must error")
 	}
@@ -436,7 +436,7 @@ func TestAuditCorpusMissingSourcePage(t *testing.T) {
 func TestAuditCorpusMissingPagesJSONL(t *testing.T) {
 	sourceDir, _ := buildAuditFixture(t)
 	emptyCorpus := t.TempDir()
-	_, err := auditCorpus(sourceDir, emptyCorpus, 1, fixtureAuditConfig())
+	_, err := auditCorpus(sourceDir, emptyCorpus, 1, fixtureAuditConfig(), nil)
 	if err == nil {
 		t.Fatal("missing pages.jsonl must error")
 	}
@@ -453,7 +453,7 @@ func TestAuditPageToleratesNegativeMaxQuotes(t *testing.T) {
 	for fp := range distinctShingles(ref, cfg.shingleN) {
 		df.add(fp)
 	}
-	f := auditPage(pageRef{PageKey: "Manual/NegQuotes"}, ref, nil, df, cfg) // must not panic
+	f := auditPage(pageRef{PageKey: "Manual/NegQuotes"}, ref, nil, df, nil, cfg) // must not panic
 	if f == nil || f.MissingSpans == 0 {
 		t.Fatalf("fully missing page not flagged: %+v", f)
 	}
@@ -488,7 +488,7 @@ func TestClipRespectsRuneBoundaries(t *testing.T) {
 // zero new flags - the exact CI-bootstrap flow for the real corpus' accepted floor.
 func TestAuditBaselineGatesFixtureRun(t *testing.T) {
 	sourceDir, corpusDir := buildAuditFixture(t)
-	res, err := auditCorpus(sourceDir, corpusDir, 4, fixtureAuditConfig())
+	res, err := auditCorpus(sourceDir, corpusDir, 4, fixtureAuditConfig(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -510,7 +510,7 @@ func TestAuditBaselineGatesFixtureRun(t *testing.T) {
 	if err := os.WriteFile(gutted, []byte("---\ntitle: TailTruncated\n---\n\nTailTruncated\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	res2, err := auditCorpus(sourceDir, corpusDir, 4, fixtureAuditConfig())
+	res2, err := auditCorpus(sourceDir, corpusDir, 4, fixtureAuditConfig(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -538,7 +538,7 @@ func TestAuditBaselineGatesFixtureRun(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(corpusDir, "pages.jsonl"), []byte(strings.Join(kept, "\n")+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	res3, err := auditCorpus(sourceDir, corpusDir, 4, fixtureAuditConfig())
+	res3, err := auditCorpus(sourceDir, corpusDir, 4, fixtureAuditConfig(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -560,7 +560,7 @@ func TestAuditCorpusRefusesPageCountMismatch(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(corpusDir, "pages.jsonl"), []byte(strings.Join(lines[:len(lines)-1], "\n")+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err = auditCorpus(sourceDir, corpusDir, 2, fixtureAuditConfig())
+	_, err = auditCorpus(sourceDir, corpusDir, 2, fixtureAuditConfig(), nil)
 	if err == nil {
 		t.Fatal("page-count mismatch must refuse the audit")
 	}
@@ -587,8 +587,12 @@ func TestAuditCorpusRefusesMalformedPageRecord(t *testing.T) {
 }
 
 // Duplicate-family backstop (blind-E2E findings item 6): near-identical pages push every
-// shingle above max-shingle-df, so a blanked family member produces no missing-run flag -
-// the gating ratio-collapse tier must catch it instead.
+// shingle above max-shingle-df, so a blanked family member produces no missing-run flag - the
+// gating ratio-collapse tier must catch it instead. The family is kept small (5 pages): after
+// one is blanked the shared shingles survive on only 4, below content-min-df, so they read as
+// chrome and the shared-content check (Part A, M0042-S6) stays blind - exactly the residual
+// duplicate-family gap the ratio gate exists to backstop. (In a larger family the survivors
+// clear content-min-df and Part A catches the blanked member directly.)
 func TestAuditRatioGateCatchesBlankedDuplicate(t *testing.T) {
 	root := t.TempDir()
 	sourceDir := filepath.Join(root, "source")
@@ -602,14 +606,16 @@ func TestAuditRatioGateCatchesBlankedDuplicate(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Six byte-identical pages (only the file name differs): every shingle has DF=6 > 4.
+	// Five byte-identical pages (only the file name differs): every shingle has DF=5 > 4, and
+	// blanking one leaves the shared shingles on 4 pages - below content-min-df (5), so the
+	// shared-content check treats them as chrome and only the ratio gate can catch the blank.
 	shared := make([]string, 40)
 	for i := range shared {
 		shared[i] = fmt.Sprintf("dupfam%d", i)
 	}
 	body := strings.Join(shared, " ")
 	var jsonl strings.Builder
-	for p := 0; p < 6; p++ {
+	for p := 0; p < 5; p++ {
 		name := fmt.Sprintf("Dup%02d", p)
 		html := `<html><body><div id="content-wrap"><p>` + body + `</p></div></body></html>`
 		if err := os.WriteFile(filepath.Join(sourceDir, "Manual", name+".html"), []byte(html), 0o644); err != nil {
@@ -629,7 +635,7 @@ func TestAuditRatioGateCatchesBlankedDuplicate(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(corpusDir, "pages.jsonl"), []byte(jsonl.String()), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	res, err := auditCorpus(sourceDir, corpusDir, 2, fixtureAuditConfig())
+	res, err := auditCorpus(sourceDir, corpusDir, 2, fixtureAuditConfig(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
