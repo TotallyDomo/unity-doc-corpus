@@ -1,0 +1,26 @@
+name: tests
+
+# Runs the Go unit tests on every push and PR. Actions are pinned by commit
+# SHA (version in the trailing comment); Dependabot keeps the pins current.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: go test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go/go.mod
+      - name: go test
+        working-directory: go
+        run: go test ./...

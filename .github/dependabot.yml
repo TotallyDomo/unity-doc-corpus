@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # Keep the SHA-pinned GitHub Actions current (bumps the pin + version comment).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  # The Go module lives in go/.
+  - package-ecosystem: gomod
+    directory: /go
+    schedule:
+      interval: weekly

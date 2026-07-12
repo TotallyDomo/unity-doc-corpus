@@ -1,5 +1,6 @@
 # unity-doc-corpus
 
+[![tests](https://github.com/TotallyDomo/unity-doc-corpus/actions/workflows/tests.yml/badge.svg)](https://github.com/TotallyDomo/unity-doc-corpus/actions/workflows/tests.yml)
 [![govulncheck](https://github.com/TotallyDomo/unity-doc-corpus/actions/workflows/govulncheck.yml/badge.svg)](https://github.com/TotallyDomo/unity-doc-corpus/actions/workflows/govulncheck.yml)
 [![gitleaks](https://github.com/TotallyDomo/unity-doc-corpus/actions/workflows/gitleaks.yml/badge.svg)](https://github.com/TotallyDomo/unity-doc-corpus/actions/workflows/gitleaks.yml)
 
