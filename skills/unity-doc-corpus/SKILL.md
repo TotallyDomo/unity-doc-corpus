@@ -25,7 +25,8 @@ suffix-less (`bin/unity-doc-corpus`); on Windows they resolve to the `.exe` auto
    ```
 
    Go names the binaries itself (`.exe` included on Windows) and writes them to `bin/`.
-   (`scripts/build.ps1` is the equivalent for PowerShell-script workflows.)
+   (`scripts/build.ps1` and `scripts/build.sh` wrap these two commands for PowerShell and
+   POSIX-sh workflows.)
 
 2. Fetch the offline docs for the requested Unity version stream (a several-hundred-MB
    download from Unity's official hosts; ~475 MB for 6000.3):
