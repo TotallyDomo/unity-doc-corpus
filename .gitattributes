@@ -3,3 +3,6 @@
 
 # PowerShell is happiest with CRLF on checkout.
 *.ps1 text eol=crlf
+
+# Shell scripts must stay LF on every checkout or the shebang breaks on Unix.
+*.sh text eol=lf
