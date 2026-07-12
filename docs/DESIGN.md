@@ -107,7 +107,7 @@ The result is a 90.5% byte reduction (648 MB -> 62 MB for Unity 6000.3).
 
 Lossy in structure must still be lossless in content, and that invariant is audited, not
 trusted: the `audit` verb
-(`bin/unity-doc-corpus audit --source unity-docs --corpus unity-docs/_agent --baseline docs/audit-baseline-6000.3.json`,
+(`bin/unity-doc-corpus audit --source unity-docs --corpus unity-docs/_agent --baseline docs/audit-baseline-6000.3.json --shared-baseline docs/shared-content-baseline-6000.3.json`,
 run after every transform change) re-extracts every page's visible text with an
 independent extractor that shares no code with the production parser, shingles it, and
 flags a page when a run of page-unique shingles is missing from its derived Markdown,
@@ -118,9 +118,11 @@ seconds, and gates on a checked-in baseline of individually triaged false positi
 ([audit-baseline-6000.3.json](audit-baseline-6000.3.json) - 496 pages, one known
 footer-adjacency class), so only new flags fail a run. Baseline entries pin each accepted
 page's flag magnitude and the corpus page count, so an accepted page that worsens - or a
-corpus that quietly shrinks - re-gates instead of hiding behind its allowlist entry. A
-second, optional `--shared-baseline` manifest extends the guard to corpus-common shared
-content (see the false-negative note below). The
+corpus that quietly shrinks - re-gates instead of hiding behind its allowlist entry. The
+baseline also pins every gate-affecting audit threshold and refuses a mismatched run. A
+second `--shared-baseline` manifest extends the guard to corpus-common shared content
+(see the false-negative note below). The flag is optional for ad hoc corpora, but the
+checked-in Unity 6000.3 maintenance gate above requires its checked-in manifest. The
 guard exists because the invariant silently failed once: a parser depth-tracking bug
 (fixed 2026-07-09) truncated entire sections while the unit tests, the recall benchmark,
 and the opt-in per-page verify step all stayed green.
@@ -130,7 +132,8 @@ and the opt-in per-page verify step all stayed green.
 Precisely stated, a passing audit proves: **every page listed in the corpus has no run of
 consecutive page-unique word shingles missing from its derived Markdown beyond the
 accepted baseline, no gating ratio collapse, and the page count matches the source
-tree.** That is a strong new-regression detector, not a mathematical lossless proof. The
+tree with an exact one-to-one source-path match.** That is a strong new-regression detector,
+not a mathematical lossless proof. The
 known false-negative classes, stated with the same candor as the false-positive floor
 above (established by an independent adversarial evaluation, 2026-07-12):
 
@@ -160,6 +163,10 @@ above (established by an independent adversarial evaluation, 2026-07-12):
   document-frequency cutoff, so the shingle invariant cannot see loss within the family;
   the gating ratio-collapse tier is the backstop there (it catches a blanked or gutted
   family member, not a small nibble).
+- **Repeated content within one page.** Page-local shingle comparison is presence-based,
+  not multiplicity-based. If the same paragraph appears twice and the transform drops one
+  copy, the surviving copy can satisfy every shingle; the ratio-collapse tier only catches
+  large losses of this shape.
 - **Reordering.** The invariant checks presence, not order: paragraphs shuffled within a
   page do not flag. That is consistent with "lossy in structure" but worth stating.
 

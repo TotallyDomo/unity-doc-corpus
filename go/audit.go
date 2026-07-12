@@ -52,6 +52,9 @@ package main
 //   - Duplicate-page families: near-identical pages push every shingle above max-shingle-df,
 //     so a blanked family member produces no page-unique missing run; the gating ratio floor
 //     (--ratio-gate-factor) is the backstop for that class.
+//   - Repeated content within one page: comparison is presence-based, not multiplicity-based,
+//     so one surviving copy of a repeated paragraph can hide the loss of another; the ratio
+//     floor catches only large losses of that shape.
 
 import (
 	"bufio"
@@ -59,6 +62,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -184,6 +188,10 @@ func runAudit(args []string) {
 		fmt.Fprintln(os.Stderr, "error: --max-shingle-df, --content-min-df, --max-quotes, --ratio-factor, --ratio-gate-factor, --ratio-min-tokens, and --min-run must not be negative")
 		os.Exit(2)
 	}
+	if *contentMinDF != *maxDF+1 {
+		fmt.Fprintln(os.Stderr, "error: --content-min-df must equal --max-shingle-df + 1 so no document-frequency band is invisible to both shared-content gates")
+		os.Exit(2)
+	}
 	cfg := auditConfig{
 		shingleN:     *shingleN,
 		maxDF:        uint32(*maxDF),
@@ -214,6 +222,19 @@ func runAudit(args []string) {
 		}
 		shared = s
 	}
+	var base *auditBaseline
+	if *baseline != "" {
+		loaded, loadErr := loadAuditBaseline(*baseline)
+		if loadErr != nil {
+			fmt.Fprintln(os.Stderr, "error:", loadErr)
+			os.Exit(1)
+		}
+		base = loaded
+		if mm := base.configMismatch(cfg); mm != "" {
+			fmt.Fprintf(os.Stderr, "error: baseline %s was generated under a different audit config (%s); its accepted magnitudes are not comparable to this run - regenerate it with --write-baseline or match the flags\n", *baseline, mm)
+			os.Exit(1)
+		}
+	}
 
 	res, err := auditCorpus(*source, *corpus, *workers, cfg, shared)
 	if err != nil {
@@ -221,14 +242,6 @@ func runAudit(args []string) {
 		os.Exit(1)
 	}
 
-	var base *auditBaseline
-	if *baseline != "" {
-		base, err = loadAuditBaseline(*baseline)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "error:", err)
-			os.Exit(1)
-		}
-	}
 	newFlags, stale := applyAuditBaseline(res.flagged, base)
 	shrunk := baselinePageShrink(base, len(res.pages))
 
@@ -242,7 +255,7 @@ func runAudit(args []string) {
 	}
 	wrote := false
 	if *writeBaseline != "" {
-		if err := writeAuditBaseline(*writeBaseline, res); err != nil {
+		if err := writeAuditBaseline(*writeBaseline, res, cfg); err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
@@ -293,17 +306,22 @@ func auditCorpus(source, corpus string, workers int, cfg auditConfig, shared *sh
 		return nil, fmt.Errorf("no pages found in %s (is the corpus built?)", filepath.Join(corpusAbs, "pages.jsonl"))
 	}
 
-	// Whole-page-loss gate: the builder derives one corpus page per source HTML file, so the
-	// counts must match exactly. A mismatch means either a build-discovery regression silently
-	// dropped pages or this source tree is not the one the corpus was built from - both make
-	// the audit's per-page verdicts meaningless, so refuse instead of certifying.
-	htmlCount, err := countSectionHTML(sourceAbs)
+	// Whole-page-loss gate: require an exact source-path bijection, not only equal counts. A
+	// duplicate pages.jsonl record could otherwise replace an omitted source page while keeping
+	// cardinality unchanged and silently leave that page unaudited.
+	sourceFiles, err := collectSectionHTML(sourceAbs)
 	if err != nil {
 		return nil, err
 	}
-	if htmlCount != len(pages) {
+	if len(sourceFiles) != len(pages) {
 		return nil, fmt.Errorf("corpus lists %d pages but %s holds %d source HTML files - a build regression dropped pages, or source and corpus are from different doc versions; rebuild with:\n  bin/unity-doc-corpus build --source %s --output %s --keep-source",
-			len(pages), sourceAbs, htmlCount, source, corpus)
+			len(pages), sourceAbs, len(sourceFiles), source, corpus)
+	}
+	for _, p := range pages {
+		if _, ok := sourceFiles[p.SourceRel]; !ok {
+			return nil, fmt.Errorf("corpus page %q points at %q, which is not in the source HTML set - source and corpus are mismatched; rebuild with:\n  bin/unity-doc-corpus build --source %s --output %s --keep-source",
+				p.PageKey, p.SourceRel, source, corpus)
+		}
 	}
 
 	// Pass 1: extract reference visible text for every page, cache it, and fold each page's
@@ -482,13 +500,45 @@ type auditBaselineEntry struct {
 }
 
 type auditBaseline struct {
-	Description string               `json:"description"`
-	PageCount   int                  `json:"page_count,omitempty"`
-	Pages       []auditBaselineEntry `json:"pages,omitempty"`
+	Schema       int                  `json:"schema_version,omitempty"`
+	Description  string               `json:"description"`
+	PageCount    int                  `json:"page_count,omitempty"`
+	ShingleN     int                  `json:"shingle_n,omitempty"`
+	MaxShingleDF int                  `json:"max_shingle_df,omitempty"`
+	ContentMinDF int                  `json:"content_min_df,omitempty"`
+	MinRun       int                  `json:"min_run,omitempty"`
+	RatioGate    float64              `json:"ratio_gate_factor,omitempty"`
+	RatioMinTok  int                  `json:"ratio_min_tokens,omitempty"`
+	Pages        []auditBaselineEntry `json:"pages,omitempty"`
 	// PageKeys is the legacy v1 format: bare keys, no magnitude. Still honored (a listed page
 	// is covered at ANY magnitude) so old baselines keep working, but reported as legacy so
 	// they get regenerated.
 	PageKeys []string `json:"page_keys,omitempty"`
+}
+
+func (b *auditBaseline) configMismatch(cfg auditConfig) string {
+	if b.legacy() {
+		return ""
+	}
+	var diffs []string
+	checks := []struct {
+		name string
+		base any
+		run  any
+	}{
+		{"shingle-n", b.ShingleN, cfg.shingleN},
+		{"max-shingle-df", b.MaxShingleDF, int(cfg.maxDF)},
+		{"content-min-df", b.ContentMinDF, cfg.contentMinDF},
+		{"min-run", b.MinRun, cfg.minRun},
+		{"ratio-gate-factor", b.RatioGate, cfg.ratioGate},
+		{"ratio-min-tokens", b.RatioMinTok, cfg.ratioMinTok},
+	}
+	for _, c := range checks {
+		if c.base != c.run {
+			diffs = append(diffs, fmt.Sprintf("%s baseline=%v run=%v", c.name, c.base, c.run))
+		}
+	}
+	return strings.Join(diffs, ", ")
 }
 
 func (b *auditBaseline) legacy() bool { return len(b.PageKeys) > 0 && len(b.Pages) == 0 }
@@ -509,12 +559,44 @@ func loadAuditBaseline(path string) (*auditBaseline, error) {
 	if err := json.Unmarshal(data, &b); err != nil {
 		return nil, fmt.Errorf("parsing baseline %s: %w", path, err)
 	}
+	if len(b.PageKeys) > 0 {
+		hasV2Fields := b.Schema != 0 || b.PageCount != 0 || b.ShingleN != 0 ||
+			b.MaxShingleDF != 0 || b.ContentMinDF != 0 || b.MinRun != 0 ||
+			b.RatioGate != 0 || b.RatioMinTok != 0 || len(b.Pages) > 0
+		if hasV2Fields {
+			return nil, fmt.Errorf("baseline %s mixes legacy page_keys with v2 fields", path)
+		}
+		seen := map[string]struct{}{}
+		for _, key := range b.PageKeys {
+			if key == "" {
+				return nil, fmt.Errorf("baseline %s contains an empty legacy page key", path)
+			}
+			if _, ok := seen[key]; ok {
+				return nil, fmt.Errorf("baseline %s contains duplicate legacy page key %q", path, key)
+			}
+			seen[key] = struct{}{}
+		}
+		return &b, nil
+	}
+	if b.Schema != 2 || b.PageCount < 1 || b.ShingleN < 1 || b.MaxShingleDF < 0 || b.ContentMinDF != b.MaxShingleDF+1 || b.MinRun < 1 || b.RatioGate < 0 || b.RatioMinTok < 0 {
+		return nil, fmt.Errorf("baseline %s is not a complete schema-v2 baseline", path)
+	}
+	seen := map[string]struct{}{}
+	for _, entry := range b.Pages {
+		if entry.PageKey == "" || entry.MissingSpans < 0 || entry.MissingShingles < 0 || entry.MDTokens < 0 {
+			return nil, fmt.Errorf("baseline %s contains an invalid page entry", path)
+		}
+		if _, ok := seen[entry.PageKey]; ok {
+			return nil, fmt.Errorf("baseline %s contains duplicate page key %q", path, entry.PageKey)
+		}
+		seen[entry.PageKey] = struct{}{}
+	}
 	return &b, nil
 }
 
 // writeAuditBaseline captures the run's gating flags with their magnitudes plus the corpus
 // page count, sorted for a stable diff.
-func writeAuditBaseline(path string, res *auditResult) error {
+func writeAuditBaseline(path string, res *auditResult, cfg auditConfig) error {
 	entries := make([]auditBaselineEntry, 0, len(res.flagged))
 	for _, f := range res.flagged {
 		if f.gates() {
@@ -527,7 +609,11 @@ func writeAuditBaseline(path string, res *auditResult) error {
 		}
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].PageKey < entries[j].PageKey })
-	b := auditBaseline{Description: auditBaselineDescription, PageCount: len(res.pages), Pages: entries}
+	b := auditBaseline{
+		Schema: 2, Description: auditBaselineDescription, PageCount: len(res.pages), Pages: entries,
+		ShingleN: cfg.shingleN, MaxShingleDF: int(cfg.maxDF), ContentMinDF: cfg.contentMinDF,
+		MinRun: cfg.minRun, RatioGate: cfg.ratioGate, RatioMinTok: cfg.ratioMinTok,
+	}
 	data, err := json.MarshalIndent(b, "", "  ")
 	if err != nil {
 		return err
@@ -593,23 +679,32 @@ func baselinePageShrink(base *auditBaseline, pageCount int) int {
 
 // countSectionHTML counts the source HTML files under the section trees with an independent
 // walk - deliberately not the builder's collectHTML, mirroring the extractor's independence.
-func countSectionHTML(sourceAbs string) (int, error) {
-	count := 0
+func collectSectionHTML(sourceAbs string) (map[string]struct{}, error) {
+	files := make(map[string]struct{})
 	for _, section := range sectionDirs {
 		err := filepath.WalkDir(filepath.Join(sourceAbs, section), func(path string, d os.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
 			if !d.IsDir() && strings.EqualFold(filepath.Ext(path), ".html") {
-				count++
+				rel, err := filepath.Rel(sourceAbs, path)
+				if err != nil {
+					return err
+				}
+				files[filepath.ToSlash(rel)] = struct{}{}
 			}
 			return nil
 		})
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 	}
-	return count, nil
+	return files, nil
+}
+
+func countSectionHTML(sourceAbs string) (int, error) {
+	files, err := collectSectionHTML(sourceAbs)
+	return len(files), err
 }
 
 // auditPage checks one page and returns a flag if it has a qualifying run of missing
@@ -794,6 +889,9 @@ func loadPageRefs(corpusAbs string) ([]pageRef, error) {
 	}
 	defer f.Close()
 	var pages []pageRef
+	pageKeys := map[string]struct{}{}
+	sourcePaths := map[string]struct{}{}
+	mdPaths := map[string]struct{}{}
 	scanner := bufio.NewScanner(f)
 	buf := make([]byte, 1024*1024)
 	scanner.Buffer(buf, 16*1024*1024)
@@ -814,8 +912,47 @@ func loadPageRefs(corpusAbs string) ([]pageRef, error) {
 		if err := json.Unmarshal(scanner.Bytes(), &rec); err != nil {
 			return nil, fmt.Errorf("%s line %d: malformed page record (%v) - rebuild the corpus", path, line, err)
 		}
-		if rec.SourceRel == "" || rec.MDRel == "" {
-			return nil, fmt.Errorf("%s line %d: page record missing source_rel/md_rel - rebuild the corpus", path, line)
+		if rec.PageKey == "" || rec.Section == "" || rec.SourceRel == "" || rec.MDRel == "" {
+			return nil, fmt.Errorf("%s line %d: page record missing page_key/section/source_rel/md_rel - rebuild the corpus", path, line)
+		}
+		validSection := false
+		for _, section := range sectionDirs {
+			validSection = validSection || rec.Section == section
+		}
+		if !validSection {
+			return nil, fmt.Errorf("%s line %d: invalid section %q - rebuild the corpus", path, line, rec.Section)
+		}
+		for label, value := range map[string]string{"source_rel": rec.SourceRel, "md_rel": rec.MDRel} {
+			if strings.Contains(value, "\\") || pathpkg.Clean(value) != value || pathpkg.IsAbs(value) || value == "." || strings.HasPrefix(value, "../") {
+				return nil, fmt.Errorf("%s line %d: non-canonical or escaping %s %q - rebuild the corpus", path, line, label, value)
+			}
+		}
+		if !strings.HasPrefix(rec.SourceRel, rec.Section+"/") || !strings.EqualFold(pathpkg.Ext(rec.SourceRel), ".html") {
+			return nil, fmt.Errorf("%s line %d: source_rel %q does not match section %q - rebuild the corpus", path, line, rec.SourceRel, rec.Section)
+		}
+		if !strings.HasPrefix(rec.MDRel, "text/"+rec.Section+"/") || !strings.EqualFold(pathpkg.Ext(rec.MDRel), ".md") {
+			return nil, fmt.Errorf("%s line %d: md_rel %q does not match section %q - rebuild the corpus", path, line, rec.MDRel, rec.Section)
+		}
+		sectionRel := strings.TrimPrefix(rec.SourceRel, rec.Section+"/")
+		expectedKey := rec.Section + "/" + strings.TrimSuffix(sectionRel, ".html")
+		expectedMD := "text/" + expectedKey + ".md"
+		if rec.PageKey != expectedKey || rec.MDRel != expectedMD {
+			return nil, fmt.Errorf("%s line %d: record identity mismatch: source_rel %q requires page_key %q and md_rel %q - rebuild the corpus", path, line, rec.SourceRel, expectedKey, expectedMD)
+		}
+		for label, value := range map[string]string{"page_key": rec.PageKey, "source_rel": rec.SourceRel, "md_rel": rec.MDRel} {
+			var seen map[string]struct{}
+			switch label {
+			case "page_key":
+				seen = pageKeys
+			case "source_rel":
+				seen = sourcePaths
+			default:
+				seen = mdPaths
+			}
+			if _, ok := seen[value]; ok {
+				return nil, fmt.Errorf("%s line %d: duplicate %s %q - rebuild the corpus", path, line, label, value)
+			}
+			seen[value] = struct{}{}
 		}
 		pages = append(pages, pageRef{PageKey: rec.PageKey, Section: rec.Section, SourceRel: rec.SourceRel, MDRel: rec.MDRel})
 	}

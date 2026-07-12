@@ -30,6 +30,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"sort"
 	"strings"
@@ -78,20 +79,31 @@ func decodeFingerprints(s string) (map[uint64]struct{}, error) {
 	}
 	set := make(map[uint64]struct{})
 	var acc uint64
+	first := true
 	for i := 0; i < len(raw); {
 		d, n := binary.Uvarint(raw[i:])
 		if n <= 0 {
 			return nil, fmt.Errorf("shared baseline fingerprints corrupt at byte %d", i)
 		}
+		if d == 0 && !first {
+			return nil, fmt.Errorf("shared baseline fingerprints contain a duplicate at byte %d", i)
+		}
+		if d > math.MaxUint64-acc {
+			return nil, fmt.Errorf("shared baseline fingerprints overflow at byte %d", i)
+		}
 		acc += d
 		set[acc] = struct{}{}
 		i += n
+		first = false
 	}
 	return set, nil
 }
 
 // writeSharedBaseline captures the run's content-classified shingle set as the manifest.
 func writeSharedBaseline(path string, content map[uint64]struct{}, cfg auditConfig) error {
+	if len(content) == 0 {
+		return fmt.Errorf("refusing to write an empty shared baseline: no shared-content shingles were classified")
+	}
 	fps := make([]uint64, 0, len(content))
 	for fp := range content {
 		fps = append(fps, fp)
@@ -120,9 +132,15 @@ func loadSharedBaseline(path string) (*sharedBaseline, error) {
 	if err := json.Unmarshal(data, &b); err != nil {
 		return nil, fmt.Errorf("parsing shared baseline %s: %w", path, err)
 	}
+	if b.ShingleN < 1 || b.MaxShingleDF < 0 || b.ContentMinDF < 1 || b.ShingleCount < 1 || b.Fingerprints == "" {
+		return nil, fmt.Errorf("shared baseline %s is missing required config, count, or fingerprints", path)
+	}
 	b.set, err = decodeFingerprints(b.Fingerprints)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	if len(b.set) != b.ShingleCount {
+		return nil, fmt.Errorf("shared baseline %s declares %d shingles but decodes to %d", path, b.ShingleCount, len(b.set))
 	}
 	return &b, nil
 }
@@ -134,18 +152,17 @@ func loadSharedBaseline(path string) (*sharedBaseline, error) {
 // finds nothing and the Part B gate silently passes regardless of real loss - the exact
 // silent-no-op class this master exists to prevent. The audit already refuses rather than
 // certifies on a page-count mismatch or a malformed record; a config-mismatched manifest is the
-// same kind of "cannot apply, so do not pretend to" and must refuse too. A recorded field of 0
-// predates the field (no such manifest ships, but hand-authored ones might) and is not checked,
-// degrading to the prior behavior rather than hard-failing.
+// same kind of "cannot apply, so do not pretend to" and must refuse too. Required fields are
+// validated while loading, so a partial or hand-authored manifest cannot silently weaken the gate.
 func (b *sharedBaseline) configMismatch(cfg auditConfig) string {
 	var diffs []string
-	if b.ShingleN != 0 && b.ShingleN != cfg.shingleN {
+	if b.ShingleN != cfg.shingleN {
 		diffs = append(diffs, fmt.Sprintf("shingle-n manifest=%d run=%d", b.ShingleN, cfg.shingleN))
 	}
-	if b.MaxShingleDF != 0 && b.MaxShingleDF != int(cfg.maxDF) {
+	if b.MaxShingleDF != int(cfg.maxDF) {
 		diffs = append(diffs, fmt.Sprintf("max-shingle-df manifest=%d run=%d", b.MaxShingleDF, cfg.maxDF))
 	}
-	if b.ContentMinDF != 0 && b.ContentMinDF != cfg.contentMinDF {
+	if b.ContentMinDF != cfg.contentMinDF {
 		diffs = append(diffs, fmt.Sprintf("content-min-df manifest=%d run=%d", b.ContentMinDF, cfg.contentMinDF))
 	}
 	return strings.Join(diffs, ", ")

@@ -186,7 +186,9 @@ built once via the Quickstart above.
 - **Download integrity**: Unity publishes no checksum for the zip, so TLS to the pinned
   hosts is the integrity control on the download itself. `fetch` prints the zip's SHA-256
   and records it (with the version and URL) in a `.unity-doc-fetch` marker so you can pin
-  a known-good value across re-fetches. The per-page SHA-256 chain in the corpus proves
+  a known-good value across re-fetches. The temporary download cache carries the same
+  URL/hash provenance and refuses a pre-positioned or altered zip without it. The per-page
+  SHA-256 chain in the corpus proves
   each derived page matches the HTML on your disk - consistency, not provenance.
 - **Executes**: the two Go binaries you build from this repo's source, plus optional local
   Python scripts. No prebuilt binaries, no hooks. One exception to name plainly: the

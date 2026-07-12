@@ -31,6 +31,8 @@ const defaultFetchDestination = "unity-docs"
 // copy pass.
 var sectionDirs = []string{"Manual", "ScriptReference"}
 
+var unityVersionRe = regexp.MustCompile(`^[0-9]+\.[0-9]+$`)
+
 // pinnedDocHosts is the closed set of hosts fetch may contact on any hop. Unity publishes
 // no checksums for the docs zip, so TLS to these hosts is the only integrity control on
 // the download - a redirect off them must fail, not be followed.
@@ -40,23 +42,25 @@ var pinnedDocHosts = map[string]bool{
 	"storage.googleapis.com":      true,
 }
 
+func checkPinnedRedirect(req *http.Request, _ []*http.Request) error {
+	if req.URL.Scheme != "https" {
+		return fmt.Errorf("redirect off https refused: %s", req.URL)
+	}
+	if !pinnedDocHosts[req.URL.Hostname()] {
+		return fmt.Errorf("redirect to unpinned host refused: %s", req.URL)
+	}
+	// storage.googleapis.com is a shared multi-tenant host: pin the docscloudstorage
+	// bucket, not just the host, so a hop cannot land in an arbitrary GCS bucket. The
+	// unity3d.com hosts are Unity's own; the host pin is the control there.
+	if req.URL.Hostname() == "storage.googleapis.com" && !strings.HasPrefix(req.URL.EscapedPath(), "/docscloudstorage/") {
+		return fmt.Errorf("redirect outside the docscloudstorage bucket refused: %s", req.URL)
+	}
+	return nil
+}
+
 var httpClient = &http.Client{
-	Timeout: 30 * time.Minute,
-	CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if req.URL.Scheme != "https" {
-			return fmt.Errorf("redirect off https refused: %s", req.URL)
-		}
-		if !pinnedDocHosts[req.URL.Hostname()] {
-			return fmt.Errorf("redirect to unpinned host refused: %s", req.URL)
-		}
-		// storage.googleapis.com is a shared multi-tenant host: pin the docscloudstorage
-		// bucket, not just the host, so a hop cannot land in an arbitrary GCS bucket. The
-		// unity3d.com hosts are Unity's own; the host pin is the control there.
-		if req.URL.Hostname() == "storage.googleapis.com" && !strings.HasPrefix(req.URL.EscapedPath(), "/docscloudstorage/") {
-			return fmt.Errorf("redirect outside the docscloudstorage bucket refused: %s", req.URL)
-		}
-		return nil
-	},
+	Timeout:       30 * time.Minute,
+	CheckRedirect: checkPinnedRedirect,
 }
 
 // fetchMarkerName marks a directory as created by fetch. It carries the fetched Unity
@@ -74,6 +78,11 @@ type fetchInfo struct {
 	ZipName string `json:"zip_name,omitempty"`
 }
 
+type fetchCacheInfo struct {
+	ZipURL    string `json:"zip_url"`
+	ZipSHA256 string `json:"zip_sha256"`
+}
+
 func readFetchInfo(root string) (fetchInfo, bool) {
 	data, err := os.ReadFile(filepath.Join(root, fetchMarkerName))
 	if err != nil {
@@ -83,7 +92,64 @@ func readFetchInfo(root string) (fetchInfo, bool) {
 	if json.Unmarshal(data, &info) != nil {
 		return fetchInfo{}, false
 	}
+	if validateFetchInfo(info) != nil {
+		return fetchInfo{}, false
+	}
 	return info, true
+}
+
+func validateFetchInfo(info fetchInfo) error {
+	if !unityVersionRe.MatchString(info.UnityVersion) {
+		return fmt.Errorf("invalid unity_version %q", info.UnityVersion)
+	}
+	if zipURLRe.FindString(info.ZipURL) != info.ZipURL {
+		return fmt.Errorf("invalid or unpinned zip_url %q", info.ZipURL)
+	}
+	if !strings.HasSuffix(info.ZipURL, "/"+info.UnityVersion+"/UnityDocumentation.zip") {
+		return fmt.Errorf("zip_url does not match unity_version %q", info.UnityVersion)
+	}
+	if len(info.ZipSHA256) != sha256.Size*2 {
+		return fmt.Errorf("invalid zip_sha256")
+	}
+	if _, err := hex.DecodeString(info.ZipSHA256); err != nil {
+		return fmt.Errorf("invalid zip_sha256: %w", err)
+	}
+	if _, err := time.Parse(time.RFC3339, info.FetchedAtUTC); err != nil {
+		return fmt.Errorf("invalid fetched_at_utc: %w", err)
+	}
+	if info.ZipName != "" && info.ZipName != info.UnityVersion+"-UnityDocumentation.zip" {
+		return fmt.Errorf("invalid zip_name %q", info.ZipName)
+	}
+	return nil
+}
+
+func cacheInfoPath(zipPath string) string { return zipPath + ".provenance.json" }
+
+func writeCacheInfo(zipPath, zipURL, zipSHA string) error {
+	data, err := json.MarshalIndent(fetchCacheInfo{ZipURL: zipURL, ZipSHA256: zipSHA}, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(cacheInfoPath(zipPath), append(data, '\n'), 0o644)
+}
+
+func validateCachedZip(zipPath, expectedURL string) (string, error) {
+	data, err := os.ReadFile(cacheInfoPath(zipPath))
+	if err != nil {
+		return "", fmt.Errorf("cached zip %s has no trusted download provenance; remove it and retry: %w", zipPath, err)
+	}
+	var info fetchCacheInfo
+	if err := json.Unmarshal(data, &info); err != nil || info.ZipURL != expectedURL || len(info.ZipSHA256) != sha256.Size*2 {
+		return "", fmt.Errorf("cached zip %s has invalid or mismatched download provenance; remove it and retry", zipPath)
+	}
+	actual, err := hashFileSHA256(zipPath)
+	if err != nil {
+		return "", err
+	}
+	if !strings.EqualFold(actual, info.ZipSHA256) {
+		return "", fmt.Errorf("cached zip %s SHA-256 %s does not match its trusted provenance %s; remove it and retry", zipPath, actual, info.ZipSHA256)
+	}
+	return actual, nil
 }
 
 // Offline docs zips live in Unity's docscloudstorage bucket, served from two hosts: the
@@ -112,6 +178,9 @@ func runFetch(args []string) {
 }
 
 func fetch(version, destination, cacheRoot string, workers int, force, deleteZip, resolveOnly bool) error {
+	if !unityVersionRe.MatchString(version) {
+		return fmt.Errorf("invalid Unity version %q: expected major.minor digits, for example 6000.3", version)
+	}
 	if workers < 1 {
 		workers = runtime.NumCPU()
 	}
@@ -142,12 +211,9 @@ func fetch(version, destination, cacheRoot string, workers int, force, deleteZip
 	zipPath := filepath.Join(cacheAbs, version+"-UnityDocumentation.zip")
 	// A --force re-fetch is about to delete the destination; salvage its retained zip into
 	// the cache first so the same version is not downloaded again.
-	if info, ok := readFetchInfo(destAbs); ok && info.ZipName != "" && info.UnityVersion == version {
-		retained := filepath.Join(destAbs, info.ZipName)
-		if _, err := os.Stat(zipPath); os.IsNotExist(err) {
-			if err := moveFile(retained, zipPath); err == nil {
-				fmt.Fprintln(os.Stderr, "Reusing retained zip from destination:", retained)
-			}
+	if force {
+		if err := salvageRetainedZip(destAbs, zipPath, version, zipURL); err != nil {
+			return err
 		}
 	}
 	if err := prepareFetchDestination(destAbs, force); err != nil {
@@ -160,9 +226,12 @@ func fetch(version, destination, cacheRoot string, workers int, force, deleteZip
 		if err != nil {
 			return err
 		}
+		if err := writeCacheInfo(zipPath, zipURL, zipSHA); err != nil {
+			return fmt.Errorf("recording cached zip provenance: %w", err)
+		}
 	} else {
 		fmt.Fprintln(os.Stderr, "Using cached zip:", zipPath)
-		zipSHA, err = hashFileSHA256(zipPath)
+		zipSHA, err = validateCachedZip(zipPath, zipURL)
 		if err != nil {
 			return err
 		}
@@ -210,6 +279,49 @@ func fetch(version, destination, cacheRoot string, workers int, force, deleteZip
 	return nil
 }
 
+func salvageRetainedZip(destAbs, cacheZip, version, resolvedURL string) error {
+	info, ok := readFetchInfo(destAbs)
+	if !ok || info.ZipName == "" || info.UnityVersion != version {
+		return nil
+	}
+	retained := filepath.Join(destAbs, info.ZipName)
+	if _, err := os.Stat(retained); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("checking retained zip before reuse: %w", err)
+	}
+	retainedSHA, err := hashFileSHA256(retained)
+	if err != nil {
+		return fmt.Errorf("checking retained zip before reuse: %w", err)
+	}
+	if !strings.EqualFold(retainedSHA, info.ZipSHA256) {
+		return fmt.Errorf("refusing to reuse retained zip %s: SHA-256 %s does not match marker %s", retained, retainedSHA, info.ZipSHA256)
+	}
+	if _, err := os.Stat(cacheZip); os.IsNotExist(err) {
+		if err := writeCacheInfo(cacheZip, resolvedURL, info.ZipSHA256); err != nil {
+			return fmt.Errorf("recording salvaged zip provenance: %w", err)
+		}
+		if err := moveFile(retained, cacheZip); err != nil {
+			os.Remove(cacheInfoPath(cacheZip))
+			return fmt.Errorf("moving retained zip into cache: %w", err)
+		}
+		fmt.Fprintln(os.Stderr, "Reusing retained zip from destination:", retained)
+		return nil
+	}
+	cachedSHA, err := hashFileSHA256(cacheZip)
+	if err != nil {
+		return err
+	}
+	if !strings.EqualFold(cachedSHA, info.ZipSHA256) {
+		return fmt.Errorf("refusing cached zip %s: SHA-256 %s does not match destination marker %s", cacheZip, cachedSHA, info.ZipSHA256)
+	}
+	if err := writeCacheInfo(cacheZip, resolvedURL, info.ZipSHA256); err != nil {
+		return fmt.Errorf("recording cached zip provenance: %w", err)
+	}
+	return nil
+}
+
 // prepareFetchDestination clears an existing destination only when --force is set AND the
 // directory carries the fetch marker proving this tool created it - the same guard shape
 // build uses for its output. Anything else is refused, never deleted.
@@ -220,8 +332,8 @@ func prepareFetchDestination(destAbs string, force bool) error {
 	if !force {
 		return fmt.Errorf("destination already exists, pass --force to replace it: %s", destAbs)
 	}
-	if _, err := os.Stat(filepath.Join(destAbs, fetchMarkerName)); err != nil {
-		return fmt.Errorf("refusing to replace %s: it has no %s marker, so fetch did not create it - delete it yourself if you really mean it", destAbs, fetchMarkerName)
+	if _, ok := readFetchInfo(destAbs); !ok {
+		return fmt.Errorf("refusing to replace %s: it has no valid %s marker, so fetch cannot prove ownership - delete it yourself if you really mean it", destAbs, fetchMarkerName)
 	}
 	return os.RemoveAll(destAbs)
 }
@@ -347,6 +459,7 @@ func extractSections(zipPath, dest string, workers int) error {
 		target string
 	}
 	var jobs []job
+	targets := map[string]string{}
 	for _, f := range r.File {
 		if f.FileInfo().IsDir() {
 			continue
@@ -360,6 +473,11 @@ func extractSections(zipPath, dest string, workers int) error {
 		if target != destAbs && !strings.HasPrefix(target, destAbs+string(os.PathSeparator)) {
 			return fmt.Errorf("zip entry escapes destination: %s", f.Name)
 		}
+		key := strings.ToLower(filepath.ToSlash(target))
+		if prior, ok := targets[key]; ok {
+			return fmt.Errorf("zip entries %q and %q resolve to the same output path %s", prior, f.Name, target)
+		}
+		targets[key] = f.Name
 		jobs = append(jobs, job{file: f, target: target})
 	}
 	if len(jobs) == 0 {
