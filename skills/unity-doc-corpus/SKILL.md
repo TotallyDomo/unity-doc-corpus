@@ -118,6 +118,9 @@ The checks below read the extracted HTML (`--source unity-docs`), so build with
   Unity's `docscloudstorage` bucket via `cloudmedia-docs.unity3d.com` (current streams) or
   `storage.googleapis.com/docscloudstorage/` (2019.4 and older). Nothing else is fetched at
   runtime.
-- Executes: the two Go binaries you build from this repository's source, plus the optional
+- Executes: the three Go binaries you build from this repository's source, plus the optional
   local Python maintenance scripts.
 - Data egress: none. Everything runs and stays on the local machine.
+- Pinned audit point: audit and pin at the annotated `v1.0.0` tag
+  (`git clone --branch v1.0.0 https://github.com/TotallyDomo/unity-doc-corpus`) for a fixed
+  trust point; `main` moves, the tag does not.
