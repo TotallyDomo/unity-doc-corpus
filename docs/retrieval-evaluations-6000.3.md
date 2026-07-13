@@ -79,3 +79,26 @@ have the same query counts; their p50/p95 timings vary slightly between runs.
 The held-out distribution is unusually sparse, which explains its higher fallback rate and
 tail latency. The production trigger keeps the much larger synthetic distributions below two
 FTS queries per case while preserving their exact recall.
+
+## Heading-weighted FTS column - rejected (2026-07-13)
+
+Hypothesis: headings extracted by the HTML parser would provide a high-signal FTS field when
+weighted between the existing title (10) and body (1) fields. The candidate rebuilt the same
+39,056-page Unity 6000.3 corpus with parser headings in a separate contentless FTS5 column.
+The predeclared weight grid was 2, 3, and 5; all three returned the same development concept
+recall, so the upper-grid candidate (5) was carried through the independent gates.
+
+| Measurement | Baseline | Heading weight 5 | Delta |
+| --- | ---: | ---: | ---: |
+| Development concept recall@10 | 59/100 | 59/100 | 0 |
+| Held-out concept recall@10 | 44/200 | 46/200 | +2 |
+| Frozen title-derived recall@10 | 976/1008 | 978/1008 | +2 |
+| Extended body-derived recall@10 | 9264/10008 | 9242/10008 | -22 |
+
+The candidate passed the content audit: 39,056 pages, 496 baselined flags, zero new or stale
+flags, and zero collapsed shared-content shingles. It was rejected because the extended
+body-derived regression violates the non-regression gate, despite the small held-out and frozen
+gains. No heading column or weighting change was kept.
+
+This reconciles M51-S4's metadata cleanup: headings remain transient parser output and are not
+preserved in docs.sqlite because this retrieval lever was not adopted.
