@@ -180,9 +180,12 @@ Measure the separate, hand-curated concept-query suite with per-query hits and m
 bin/unity-doc-corpus-concept-eval --corpus unity-docs/_agent
 ```
 
-The 100 fixed cases in [`docs/concept-queries-6000.3.json`](docs/concept-queries-6000.3.json)
-are agent-style requests with verified gold source pages, balanced between Manual and Scripting
-API coverage. This is intentionally distinct from the benchmark's title-derived sample.
+The fixed 100-case development suite in [`docs/concept-queries-6000.3.json`](docs/concept-queries-6000.3.json)
+and separate 200-case held-out suite in [`docs/concept-queries-6000.3-heldout.json`](docs/concept-queries-6000.3-heldout.json)
+measure agent-style requests with verified gold source pages. Both are balanced between Manual
+and Scripting API coverage, and the evaluator reports each section separately. Curation and
+the held-out decision gate are documented in [`docs/concept-query-curation-6000.3.md`](docs/concept-query-curation-6000.3.md).
+This is intentionally distinct from the benchmark's title-derived sample.
 
 ## Architecture
 

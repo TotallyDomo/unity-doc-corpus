@@ -72,11 +72,9 @@ func TestSearchCorpusMissingDB(t *testing.T) {
 	}
 }
 
-// Queries that break the raw FTS5 parser must fall back to the sanitized, term-quoted retry
-// instead of surfacing a parse error: unbalanced quotes ("unterminated string", which does
-// not contain the substring "syntax error" the old retry keyed on) and bareword operators
-// (whose sanitized form equals the original query, which the old retry skipped).
-func TestSearchCorpusSanitizeRetry(t *testing.T) {
+// Natural-language input is normalized before it reaches FTS5. Unbalanced quotes and bareword
+// operators are literal terms, so they never become parser errors or Boolean syntax.
+func TestSearchCorpusOperatorSanitization(t *testing.T) {
 	dir := t.TempDir()
 	buildTestCorpus(t,
 		dir,
@@ -94,20 +92,11 @@ func TestSearchCorpusSanitizeRetry(t *testing.T) {
 	for _, c := range cases {
 		hits, err := searchCorpus(dir, c.query, 5)
 		if err != nil {
-			t.Errorf("searchCorpus(%q) must sanitize-retry, got error: %v", c.query, err)
+			t.Errorf("searchCorpus(%q) must sanitize safely, got error: %v", c.query, err)
 			continue
 		}
 		if c.wantHit && len(hits) == 0 {
 			t.Errorf("searchCorpus(%q) expected a hit after quoting", c.query)
 		}
-	}
-}
-
-func TestFtsQuoteTerms(t *testing.T) {
-	if got := ftsQuoteTerms("AND OR NOT"); got != `"AND" "OR" "NOT"` {
-		t.Errorf("ftsQuoteTerms = %q", got)
-	}
-	if got := ftsQuoteTerms(""); got != "" {
-		t.Errorf("empty input must stay empty, got %q", got)
 	}
 }
