@@ -56,11 +56,6 @@ func transformOne(sourceAbs string, titles map[string]map[string]string, job tra
 	sourceRel, _ := filepath.Rel(sourceAbs, job.Path)
 	rec := record{
 		CanonicalURL: parsed.Canonical,
-		ContentChars: len(parsed.Body),
-		HeadingCount: len(parsed.Headings),
-		Headings:     parsed.Headings,
-		LinkCount:    len(parsed.Links),
-		MDRel:        "text/" + job.Section + "/" + pageID + ".md",
 		PageID:       pageID,
 		PageKey:      job.Section + "/" + pageID,
 		Section:      job.Section,
@@ -70,14 +65,14 @@ func transformOne(sourceAbs string, titles map[string]map[string]string, job tra
 		Body:         parsed.Body,
 	}
 	_ = timer.measure("hash_source", func() error {
-		rec.SourceSHA256 = sha256Hex(raw)
+		rec.SourceSHA256 = sha256Bytes(raw)
 		return nil
 	})
 	md := writeMarkdown(rec, parsed.Links)
 	rec.MD = md
 	rec.TextBytes = len(md)
 	_ = timer.measure("hash_markdown", func() error {
-		rec.TextSHA256 = sha256Hex(md)
+		rec.TextSHA256 = sha256Bytes(md)
 		return nil
 	})
 	return transformResult{Record: rec}
@@ -142,7 +137,7 @@ func build(source, output string, workers int, keepSource bool) error {
 	if err != nil {
 		return err
 	}
-	pageStmt, err := tx.Prepare("INSERT INTO pages VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+	pageStmt, err := tx.Prepare("INSERT INTO pages(page_key, section, page_id, title, source_rel, canonical_url, source_sha256, text_sha256, source_bytes, text_bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		return err
 	}
@@ -160,13 +155,6 @@ func build(source, output string, workers int, keepSource bool) error {
 		return err
 	}
 	defer pageTextStmt.Close()
-	pagesFile, err := os.Create(filepath.Join(outputAbs, "pages.jsonl"))
-	if err != nil {
-		return err
-	}
-	defer pagesFile.Close()
-	pagesWriter := bufio.NewWriter(pagesFile)
-	defer pagesWriter.Flush()
 	searchFile, err := os.Create(filepath.Join(outputAbs, "search_index.tsv"))
 	if err != nil {
 		return err
@@ -174,7 +162,7 @@ func build(source, output string, workers int, keepSource bool) error {
 	defer searchFile.Close()
 	searchWriter := bufio.NewWriter(searchFile)
 	defer searchWriter.Flush()
-	searchWriter.WriteString("page_key\tsection\tpage_id\ttitle\tsource_rel\tmd_rel\tcanonical_url\n")
+	searchWriter.WriteString("page_key\tsection\tpage_id\ttitle\tsource_rel\tcanonical_url\n")
 	var jobs []transformJob
 	for _, section := range []string{"Manual", "ScriptReference"} {
 		for _, path := range sectionFiles[section] {
@@ -207,20 +195,14 @@ func build(source, output string, workers int, keepSource bool) error {
 			return result.Err
 		}
 		rec := result.Record
-		if err := timer.measure("write_jsonl_tsv", func() error {
-			data, err := json.Marshal(rec)
-			if err != nil {
-				return err
-			}
-			pagesWriter.Write(data)
-			pagesWriter.WriteByte('\n')
-			fmt.Fprintf(searchWriter, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", rec.PageKey, rec.Section, rec.PageID, strings.ReplaceAll(rec.Title, "\t", " "), rec.SourceRel, rec.MDRel, rec.CanonicalURL)
+		if err := timer.measure("write_tsv", func() error {
+			fmt.Fprintf(searchWriter, "%s\t%s\t%s\t%s\t%s\t%s\n", rec.PageKey, rec.Section, rec.PageID, strings.ReplaceAll(rec.Title, "\t", " "), rec.SourceRel, rec.CanonicalURL)
 			return nil
 		}); err != nil {
 			return err
 		}
 		if err := timer.measure("sqlite_insert", func() error {
-			res, err := pageStmt.Exec(rec.PageKey, rec.Section, rec.PageID, rec.Title, rec.SourceRel, rec.MDRel, rec.CanonicalURL, rec.SourceSHA256, rec.TextSHA256, rec.SourceBytes, rec.TextBytes)
+			res, err := pageStmt.Exec(rec.PageKey, rec.Section, rec.PageID, rec.Title, rec.SourceRel, rec.CanonicalURL, rec.SourceSHA256, rec.TextSHA256, rec.SourceBytes, rec.TextBytes)
 			if err != nil {
 				return err
 			}
@@ -266,7 +248,7 @@ func build(source, output string, workers int, keepSource bool) error {
 		"derived_to_source_ratio": float64(totalTextBytes) / float64(totalSourceBytes),
 		"sqlite_fts5":             fts5,
 		"worker_count":            workers,
-		"files":                   map[string]string{"pages_jsonl": "pages.jsonl", "search_index_tsv": "search_index.tsv", "sqlite": "docs.sqlite"},
+		"files":                   map[string]string{"search_index_tsv": "search_index.tsv", "sqlite": "docs.sqlite"},
 		"read_model":              "page Markdown is served from the page_text table in docs.sqlite via the `page <page_key>` verb; there is no text/ directory.",
 		"no_data_loss_note":       "The original HTML stays available: via the retained offline zip (see the .unity-doc-fetch marker and the source verb), or the extracted tree when built with --keep-source. Derived Markdown strips page chrome for agent lookup and records source paths plus SHA-256 hashes for every transformed HTML page.",
 	}
@@ -341,7 +323,6 @@ This is a derived lookup corpus generated from offline Unity documentation. It i
 ## Files
 
 - `+"`docs.sqlite`"+` - SQLite metadata, per-page Markdown (the `+"`page_text`"+` table), and FTS5 full-text search when available.
-- `+"`pages.jsonl`"+` - one metadata record per transformed HTML page.
 - `+"`search_index.tsv`"+` - compact page lookup table.
 - `+"`manifest.json`"+` - generation summary and source/output paths.
 

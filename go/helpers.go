@@ -45,6 +45,14 @@ func sha256Hex(data []byte) string {
 
 }
 
+func sha256Bytes(data []byte) []byte {
+
+	sum := sha256.Sum256(data)
+
+	return append([]byte(nil), sum[:]...)
+
+}
+
 func defaultWorkers() int {
 
 	workers := runtime.NumCPU() / 2

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -120,7 +121,7 @@ func writeMarkdown(rec record, links []link) []byte {
 
 	fmt.Fprintf(&b, "source_rel: %s\n", rec.SourceRel)
 
-	fmt.Fprintf(&b, "source_sha256: %s\n", rec.SourceSHA256)
+	fmt.Fprintf(&b, "source_sha256: %s\n", hex.EncodeToString(rec.SourceSHA256))
 
 	fmt.Fprintf(&b, "canonical_url: %s\n", rec.CanonicalURL)
 

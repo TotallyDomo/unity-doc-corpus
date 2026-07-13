@@ -25,16 +25,6 @@ type link struct {
 type record struct {
 	CanonicalURL string `json:"canonical_url"`
 
-	ContentChars int `json:"content_chars"`
-
-	HeadingCount int `json:"heading_count"`
-
-	Headings []string `json:"headings"`
-
-	LinkCount int `json:"link_count"`
-
-	MDRel string `json:"md_rel"`
-
 	PageID string `json:"page_id"`
 
 	PageKey string `json:"page_key"`
@@ -45,11 +35,11 @@ type record struct {
 
 	SourceRel string `json:"source_rel"`
 
-	SourceSHA256 string `json:"source_sha256"`
+	SourceSHA256 []byte `json:"-"`
 
 	TextBytes int `json:"text_bytes"`
 
-	TextSHA256 string `json:"text_sha256"`
+	TextSHA256 []byte `json:"-"`
 
 	Title string `json:"title"`
 
