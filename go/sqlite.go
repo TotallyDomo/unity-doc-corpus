@@ -46,7 +46,14 @@ func createSQLite(path string) (*sql.DB, bool, error) {
 
 	fts5 := true
 
-	if _, err = db.Exec("CREATE VIRTUAL TABLE pages_fts USING fts5(page_key UNINDEXED, title, body)"); err != nil {
+	// Contentless FTS5 (content=''): stores only the inverted index, not a %_content shadow
+	// copy of title/body. The read payload (the body text) lives once in page_text; recall is
+	// unchanged because bm25 runs off the index statistics, not the content shadow - verified
+	// bit-identical to the content-backed table over the corpus (M51-S2). page_key stays as an
+	// UNINDEXED column so the bm25 weight vector (0, 10, 1) over (page_key, title, body) is
+	// unchanged; contentless makes it non-retrievable, so search/benchmark join pages by rowid
+	// (build.go aligns the FTS rowid to the pages rowid) rather than reading f.page_key.
+	if _, err = db.Exec("CREATE VIRTUAL TABLE pages_fts USING fts5(page_key UNINDEXED, title, body, content='')"); err != nil {
 
 		fts5 = false
 
