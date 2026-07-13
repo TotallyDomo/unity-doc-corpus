@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
-# Build the two Go binaries into bin/. POSIX-sh peer of build.ps1 for Unix-like
-# shells (Linux, macOS, Git Bash on Windows). The canonical path is still the two
+# Build the three Go binaries into bin/. POSIX-sh peer of build.ps1 for Unix-like
+# shells (Linux, macOS, Git Bash on Windows). The canonical path is still the three
 # `go build` commands in the README quickstart; this wrapper adds the same
 # conveniences build.ps1 has: quiet-on-success (go build chatter otherwise
 # re-enters agent context on every later turn), symbol-stripped output (-s -w),
@@ -32,9 +32,10 @@ run_go() {
 # -o makes it write into bin/ under those names, matching the README quickstart.
 run_go "go build" build -trimpath -ldflags "-s -w" -o "$out_dir/" .
 run_go "go build (benchmark)" build -trimpath -ldflags "-s -w" -o "$out_dir/" ./cmd/unity-doc-corpus-benchmark
+run_go "go build (concept-eval)" build -trimpath -ldflags "-s -w" -o "$out_dir/" ./cmd/unity-doc-corpus-concept-eval
 
 # Confirm each binary landed, tolerating the .exe suffix (Git Bash on Windows).
-for base in unity-doc-corpus unity-doc-corpus-benchmark; do
+for base in unity-doc-corpus unity-doc-corpus-benchmark unity-doc-corpus-concept-eval; do
     if [ -f "$out_dir/$base" ]; then
         echo "$out_dir/$base"
     elif [ -f "$out_dir/$base.exe" ]; then

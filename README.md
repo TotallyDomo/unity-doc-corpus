@@ -66,7 +66,7 @@ go build -C go -trimpath -o ../bin/ ./cmd/unity-doc-corpus-concept-eval
 ```
 
 Go names the binaries itself (`.exe` included on Windows) and writes them to `bin/`.
-`scripts/build.ps1` and `scripts/build.sh` wrap the same two commands.
+`scripts/build.ps1` and `scripts/build.sh` wrap the same three commands.
 
 **2. Fetch Unity's official offline docs** (one time per version):
 
