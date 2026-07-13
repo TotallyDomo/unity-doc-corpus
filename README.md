@@ -165,11 +165,14 @@ remain the job of per-page source verification. See
 [`docs/DESIGN.md`](docs/DESIGN.md#what-the-audit-proves---and-what-it-does-not) for the
 precise contract and the checked-in baselines.
 
-Reproduce the retrieval benchmark with:
+Run the fixed 1,000-case title-derived regression benchmark with:
 
 ```
-bin/unity-doc-corpus-benchmark --source unity-docs --corpus unity-docs/_agent --generated-cases 1000
+bin/unity-doc-corpus-benchmark --corpus unity-docs/_agent
 ```
+
+Use `--extended` for the fixed 10,000-case body-snippet recall tier. Use
+`--comparison --source unity-docs` for the slower four-lane FTS-versus-scan comparison.
 
 Measure the separate, hand-curated concept-query suite with per-query hits and misses:
 
