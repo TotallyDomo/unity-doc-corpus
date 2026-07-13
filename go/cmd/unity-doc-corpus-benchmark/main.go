@@ -34,6 +34,21 @@ type benchCase struct {
 	Generated bool
 }
 
+type benchmarkMode string
+
+const (
+	recallMode     benchmarkMode = "recall"
+	comparisonMode benchmarkMode = "comparison"
+
+	defaultRecallGeneratedCases  = 1000
+	extendedRecallGeneratedCases = 10000
+	comparisonGeneratedCases     = 1000
+
+	// referenceBaseline is the frozen title-derived result that storage and retrieval
+	// changes compare against. The default recall tier deliberately preserves its case set.
+	referenceBaseline = "docs/benchmark-6000.3.json"
+)
+
 type hit struct {
 	SourceRel string
 	Score     int
@@ -328,6 +343,116 @@ func generatedCases(corpus string, limit int) ([]benchCase, error) {
 	return cases, nil
 }
 
+// markdownBody drops generated front matter and the synthetic link appendix before selecting a
+// body-derived query. Neither is document prose an agent would use to express an information
+// need.
+func markdownBody(md string) string {
+	const delimiter = "---\n"
+	if !strings.HasPrefix(md, delimiter) {
+		return strings.TrimSpace(md)
+	}
+	if end := strings.Index(md[len(delimiter):], delimiter); end >= 0 {
+		body := md[len(delimiter)+end+len(delimiter):]
+		if links := strings.Index(body, "\n## Content Links"); links >= 0 {
+			body = body[:links]
+		}
+		return strings.TrimSpace(body)
+	}
+	return strings.TrimSpace(md)
+}
+
+// bodyQuery returns a short, contiguous body snippet made only from terms that do not occur in
+// the page title or page id. It selects the most specific snippet by corpus document frequency,
+// avoiding boilerplate openings such as "this page describes" when a later concept phrase is
+// available. This keeps the extended tier independent of title weighting and of generated links.
+func bodyQuery(md, title, pageID string, termDocFrequency map[string]int) string {
+	excluded := map[string]bool{}
+	for _, term := range tokenize(title+" "+pageID, true) {
+		excluded[term] = true
+	}
+	terms := tokenize(markdownBody(md), true)
+	bestStart, bestScore := -1, -1
+	for start := 0; start+4 <= len(terms); start++ {
+		score := 0
+		for _, term := range terms[start : start+4] {
+			if excluded[term] {
+				score = -1
+				break
+			}
+			frequency := termDocFrequency[term]
+			if frequency < 1 {
+				frequency = 1
+			}
+			score += 1_000_000 / frequency
+		}
+		if score > bestScore {
+			bestStart, bestScore = start, score
+		}
+	}
+	if bestStart < 0 {
+		return ""
+	}
+	return strings.Join(terms[bestStart:bestStart+4], " ")
+}
+
+// generatedBodyCases is the harder, non-title-derived distribution for the fixed extended
+// tier. Unlike the legacy title sample, it uses even index mapping so a 10k run spans the whole
+// corpus rather than stopping after the first len(eligible)/limit stride range.
+func generatedBodyCases(corpus string, limit int) ([]benchCase, error) {
+	type candidate struct {
+		sourceRel string
+		title     string
+		pageID    string
+		md        string
+	}
+	db, err := sql.Open("sqlite", filepath.Join(corpus, "docs.sqlite"))
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	rows, err := db.Query("SELECT p.source_rel, p.title, p.page_id, pt.md FROM pages p JOIN page_text pt ON pt.page_key = p.page_key ORDER BY p.section, p.source_rel")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var candidates []candidate
+	termDocFrequency := map[string]int{}
+	for rows.Next() {
+		var sourceRel, title, pageID, md string
+		if err := rows.Scan(&sourceRel, &title, &pageID, &md); err != nil {
+			return nil, err
+		}
+		if sourceRel == "" {
+			return nil, fmt.Errorf("pages table contains a row with no source_rel")
+		}
+		seen := map[string]bool{}
+		for _, term := range tokenize(markdownBody(md), true) {
+			seen[term] = true
+		}
+		for term := range seen {
+			termDocFrequency[term]++
+		}
+		candidates = append(candidates, candidate{sourceRel: sourceRel, title: title, pageID: pageID, md: md})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	var eligible []benchCase
+	for _, candidate := range candidates {
+		if query := bodyQuery(candidate.md, candidate.title, candidate.pageID, termDocFrequency); query != "" {
+			eligible = append(eligible, benchCase{"generated-body:" + candidate.sourceRel, query, candidate.sourceRel, true})
+		}
+	}
+	if limit <= 0 || len(eligible) <= limit {
+		return eligible, nil
+	}
+	cases := make([]benchCase, 0, limit)
+	for i := 0; i < limit; i++ {
+		cases = append(cases, eligible[i*len(eligible)/limit])
+	}
+	return cases, nil
+}
+
 func containsHit(hits []hit, expected string) bool {
 	for _, hit := range hits {
 		if hit.SourceRel == expected {
@@ -350,46 +475,80 @@ func main() {
 	source := flag.String("source", "", "Unity documentation root.")
 	corpus := flag.String("corpus", "", "Agent corpus root.")
 	output := flag.String("output", "", "Optional JSON report path.")
-	generatedCount := flag.Int("generated-cases", 1000, "Generated title/page-id cases.")
+	extended := flag.Bool("extended", false, "Run the fixed 10k body-snippet recall tier.")
+	comparison := flag.Bool("comparison", false, "Run the fixed 1k title-derived, four-lane FTS-vs-grep comparison.")
+	legacyGeneratedCount := flag.Int("generated-cases", 0, "Deprecated compatibility flag; only 1000 is accepted. Use --extended for the fixed 10k tier.")
 	workers := flag.Int("workers", 0, "Worker count for benchmark cases. Defaults to half of logical CPUs.")
 	flag.Parse()
-	if *source == "" || *corpus == "" {
-		fmt.Fprintln(os.Stderr, "Usage: unity-doc-corpus-benchmark --source <docs-root> --corpus <agent-corpus> [--output report.json]")
+	if *corpus == "" {
+		fmt.Fprintln(os.Stderr, "Usage: unity-doc-corpus-benchmark --corpus <agent-corpus> [--extended | --comparison --source <docs-root>] [--output report.json]")
+		os.Exit(2)
+	}
+	if *extended && *comparison {
+		fmt.Fprintln(os.Stderr, "error: --extended and --comparison are mutually exclusive")
+		os.Exit(2)
+	}
+	if *legacyGeneratedCount != 0 && *legacyGeneratedCount != defaultRecallGeneratedCases {
+		fmt.Fprintf(os.Stderr, "error: --generated-cases only accepts %d for compatibility; use --extended for the fixed %d-case tier\n", defaultRecallGeneratedCases, extendedRecallGeneratedCases)
+		os.Exit(2)
+	}
+	if *comparison && *source == "" {
+		fmt.Fprintln(os.Stderr, "error: --comparison requires --source <docs-root> for the raw and derived scan lanes")
 		os.Exit(2)
 	}
 	totalStart := time.Now()
-	loadStart := time.Now()
-	sourceDocs, err := loadSourceDocs(*source)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
+	mode := recallMode
+	distribution := "title-derived"
+	generatedLimit := defaultRecallGeneratedCases
+	if *extended {
+		distribution = "body-snippet"
+		generatedLimit = extendedRecallGeneratedCases
 	}
-	derivedDocs, err := loadDerivedDocs(*corpus)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
+	if *comparison {
+		mode = comparisonMode
+		generatedLimit = comparisonGeneratedCases
 	}
-	loadDuration := time.Since(loadStart)
-	fmt.Fprintln(os.Stderr, "Indexing raw HTML into the FTS5 baseline (one-time, several minutes on a full corpus)...")
-	rawFTSPath, rawFTSBuild, err := buildRawFTSIndex(sourceDocs)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
-	}
-	defer os.Remove(rawFTSPath)
 	cases := append([]benchCase{}, defaultCases...)
-	generated, err := generatedCases(*corpus, *generatedCount)
+	var (
+		generated []benchCase
+		err       error
+	)
+	if *extended {
+		generated, err = generatedBodyCases(*corpus, generatedLimit)
+	} else {
+		// Keep the title sample's legacy stride selection unchanged: this is the frozen
+		// case set recorded in referenceBaseline, not a new distribution to tune against.
+		generated, err = generatedCases(*corpus, generatedLimit)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 	cases = append(cases, generated...)
-	sourceBytes, derivedBytes := 0, 0
-	for _, doc := range sourceDocs {
-		sourceBytes += doc.Bytes
-	}
-	for _, doc := range derivedDocs {
-		derivedBytes += doc.Bytes
+
+	var sourceDocs, derivedDocs []doc
+	var loadDuration, rawFTSBuild time.Duration
+	rawFTSPath := ""
+	if mode == comparisonMode {
+		loadStart := time.Now()
+		sourceDocs, err = loadSourceDocs(*source)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		derivedDocs, err = loadDerivedDocs(*corpus)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		loadDuration = time.Since(loadStart)
+		fmt.Fprintln(os.Stderr, "Indexing raw HTML into the FTS5 baseline (one-time, several minutes on a full corpus)...")
+		rawFTSPath, rawFTSBuild, err = buildRawFTSIndex(sourceDocs)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		defer os.Remove(rawFTSPath)
 	}
 	if *workers < 1 {
 		*workers = defaultWorkers()
@@ -403,23 +562,21 @@ func main() {
 			defer wg.Done()
 			for index := range caseCh {
 				c := cases[index]
-				terms := tokenize(c.Query, false)
-				sourceHits, sourceElapsed, _ := searchDocs(sourceDocs, terms)
-				derivedHits, derivedElapsed, _ := searchDocs(derivedDocs, terms)
 				ftsHits, ftsElapsed := sqliteHits(*corpus, c.Query)
-				rawHits, rawElapsed := rawFTSHits(rawFTSPath, c.Query)
-				results[index] = caseResult{
-					Name:        c.Name,
-					Expected:    c.Expected,
-					SourceOK:    containsHit(sourceHits, c.Expected),
-					DerivedOK:   containsHit(derivedHits, c.Expected),
-					SQLiteOK:    containsString(ftsHits, c.Expected),
-					RawFTSOK:    containsString(rawHits, c.Expected),
-					SourceTime:  sourceElapsed,
-					DerivedTime: derivedElapsed,
-					SQLiteTime:  ftsElapsed,
-					RawFTSTime:  rawElapsed,
+				result := caseResult{Name: c.Name, Expected: c.Expected, SQLiteOK: containsString(ftsHits, c.Expected), SQLiteTime: ftsElapsed}
+				if mode == comparisonMode {
+					terms := tokenize(c.Query, false)
+					sourceHits, sourceElapsed, _ := searchDocs(sourceDocs, terms)
+					derivedHits, derivedElapsed, _ := searchDocs(derivedDocs, terms)
+					rawHits, rawElapsed := rawFTSHits(rawFTSPath, c.Query)
+					result.SourceOK = containsHit(sourceHits, c.Expected)
+					result.DerivedOK = containsHit(derivedHits, c.Expected)
+					result.RawFTSOK = containsString(rawHits, c.Expected)
+					result.SourceTime = sourceElapsed
+					result.DerivedTime = derivedElapsed
+					result.RawFTSTime = rawElapsed
 				}
+				results[index] = result
 			}
 		}()
 	}
@@ -443,49 +600,82 @@ func main() {
 			sectionStats[section] = stats
 		}
 		stats["cases"]++
-		if result.SourceOK {
-			sourceRecall++
-			stats["source_top10_recall_count"]++
-		}
-		if result.DerivedOK {
-			derivedRecall++
-			stats["derived_top10_recall_count"]++
-		}
 		if result.SQLiteOK {
 			sqliteRecall++
 			stats["sqlite_top10_recall_count"]++
 		}
-		if result.RawFTSOK {
-			rawFTSRecall++
-			stats["raw_fts_top10_recall_count"]++
-		}
-		sourceSearch += result.SourceTime
-		derivedSearch += result.DerivedTime
 		sqliteSearch += result.SQLiteTime
-		rawFTSSearch += result.RawFTSTime
-		if len(missSamples) < 20 && (!result.SourceOK || !result.DerivedOK || !result.SQLiteOK || !result.RawFTSOK) {
-			missSamples = append(missSamples, map[string]any{"name": result.Name, "expected": result.Expected, "source_top10_recall": result.SourceOK, "derived_top10_recall": result.DerivedOK, "sqlite_top10_recall": result.SQLiteOK, "raw_fts_top10_recall": result.RawFTSOK})
+		if mode == comparisonMode {
+			if result.SourceOK {
+				sourceRecall++
+				stats["source_top10_recall_count"]++
+			}
+			if result.DerivedOK {
+				derivedRecall++
+				stats["derived_top10_recall_count"]++
+			}
+			if result.RawFTSOK {
+				rawFTSRecall++
+				stats["raw_fts_top10_recall_count"]++
+			}
+			sourceSearch += result.SourceTime
+			derivedSearch += result.DerivedTime
+			rawFTSSearch += result.RawFTSTime
+		}
+		miss := !result.SQLiteOK
+		if mode == comparisonMode {
+			miss = miss || !result.SourceOK || !result.DerivedOK || !result.RawFTSOK
+		}
+		if len(missSamples) < 20 && miss {
+			sample := map[string]any{"name": result.Name, "expected": result.Expected, "sqlite_top10_recall": result.SQLiteOK}
+			if mode == comparisonMode {
+				sample["source_top10_recall"] = result.SourceOK
+				sample["derived_top10_recall"] = result.DerivedOK
+				sample["raw_fts_top10_recall"] = result.RawFTSOK
+			}
+			missSamples = append(missSamples, sample)
 		}
 	}
+	timings := map[string]float64{
+		"sqlite_search_total": float64(sqliteSearch.Microseconds()) / 1000,
+		"total":               float64(time.Since(totalStart).Microseconds()) / 1000,
+	}
 	report := map[string]any{
-		"source":                     source,
-		"corpus":                     corpus,
-		"source_file_count":          len(sourceDocs),
-		"derived_file_count":         len(derivedDocs),
-		"case_count":                 len(cases),
-		"default_case_count":         len(defaultCases),
-		"generated_case_count":       len(generated),
-		"source_html_bytes":          sourceBytes,
-		"derived_markdown_bytes":     derivedBytes,
-		"derived_to_source_ratio":    float64(derivedBytes) / float64(sourceBytes),
-		"source_top10_recall_count":  sourceRecall,
-		"derived_top10_recall_count": derivedRecall,
-		"sqlite_top10_recall_count":  sqliteRecall,
-		"raw_fts_top10_recall_count": rawFTSRecall,
-		"recall_by_section":          sectionStats,
-		"worker_count":               *workers,
-		"timings_ms":                 map[string]float64{"load": float64(loadDuration.Microseconds()) / 1000, "raw_fts_index_build": float64(rawFTSBuild.Microseconds()) / 1000, "source_search_total": float64(sourceSearch.Microseconds()) / 1000, "derived_search_total": float64(derivedSearch.Microseconds()) / 1000, "sqlite_search_total": float64(sqliteSearch.Microseconds()) / 1000, "raw_fts_search_total": float64(rawFTSSearch.Microseconds()) / 1000, "total": float64(time.Since(totalStart).Microseconds()) / 1000},
-		"miss_samples":               missSamples,
+		"mode":                      mode,
+		"case_distribution":         distribution,
+		"reference_baseline":        referenceBaseline,
+		"corpus":                    *corpus,
+		"case_count":                len(cases),
+		"default_case_count":        len(defaultCases),
+		"generated_case_count":      len(generated),
+		"sqlite_top10_recall_count": sqliteRecall,
+		"recall_by_section":         sectionStats,
+		"worker_count":              *workers,
+		"timings_ms":                timings,
+		"miss_samples":              missSamples,
+	}
+	if mode == comparisonMode {
+		sourceBytes, derivedBytes := 0, 0
+		for _, doc := range sourceDocs {
+			sourceBytes += doc.Bytes
+		}
+		for _, doc := range derivedDocs {
+			derivedBytes += doc.Bytes
+		}
+		timings["load"] = float64(loadDuration.Microseconds()) / 1000
+		timings["raw_fts_index_build"] = float64(rawFTSBuild.Microseconds()) / 1000
+		timings["source_search_total"] = float64(sourceSearch.Microseconds()) / 1000
+		timings["derived_search_total"] = float64(derivedSearch.Microseconds()) / 1000
+		timings["raw_fts_search_total"] = float64(rawFTSSearch.Microseconds()) / 1000
+		report["source"] = *source
+		report["source_file_count"] = len(sourceDocs)
+		report["derived_file_count"] = len(derivedDocs)
+		report["source_html_bytes"] = sourceBytes
+		report["derived_markdown_bytes"] = derivedBytes
+		report["derived_to_source_ratio"] = float64(derivedBytes) / float64(sourceBytes)
+		report["source_top10_recall_count"] = sourceRecall
+		report["derived_top10_recall_count"] = derivedRecall
+		report["raw_fts_top10_recall_count"] = rawFTSRecall
 	}
 	data, _ := json.MarshalIndent(report, "", "  ")
 	data = append(data, '\n')

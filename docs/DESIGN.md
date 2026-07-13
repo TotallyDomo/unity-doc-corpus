@@ -236,27 +236,24 @@ Claims about "better lookup" are cheap; the benchmark binary
 (`go/cmd/unity-doc-corpus-benchmark`) makes them measurable and reproducible:
 
 ```
-bin/unity-doc-corpus-benchmark --source unity-docs --corpus unity-docs/_agent --generated-cases 1000
+bin/unity-doc-corpus-benchmark --corpus unity-docs/_agent
+bin/unity-doc-corpus-benchmark --corpus unity-docs/_agent --extended
+bin/unity-doc-corpus-benchmark --source unity-docs --corpus unity-docs/_agent --comparison
 ```
 
-**Cases.** 8 curated lookups (real agent-style queries: API signatures, manual concepts)
-plus 1000 generated cases sampled at an even stride across the `pages` table ordered by
-section and source path, so the case mix matches the corpus mix (~91% ScriptReference, ~9%
-Manual). For each
-sampled page, the page title (falling back to page id) becomes the query and that page is
-the expected answer. The sample is deterministic - no RNG, same corpus in, same cases out.
+**Modes and cases.** The default routine check runs only the shipped corpus FTS5 lane: 8
+curated lookups plus a frozen 1,000-case title-derived sample. `--extended` keeps the fast
+FTS-only lane but uses 10,000 evenly sampled four-term snippets from page bodies, excluding
+title and page-id terms. This harder distribution exercises concept retrieval without
+scaling the expensive scan lanes. `--comparison` runs the frozen title-derived cases
+through four strategies: (a) naive term-scoring over raw HTML, (b) the same scan over
+derived Markdown, (c) FTS5 bm25 over raw HTML, and (d) FTS5 bm25 over the shipped corpus.
+Every tier is deterministic - no RNG, same corpus in, same cases out. A case is recalled
+when its expected page appears in the top 10 results.
 
-**Lanes.** Each case runs against four search strategies - a 2x2 of ranker x
-representation: (a) naive term-scoring scan over the raw offline HTML, (b) the same scan
-over the derived Markdown, (c) FTS5 bm25 over the raw untransformed HTML (built by the
-benchmark into a throwaway index, title from `<title>`, identical ranker settings to the
-shipped lane), and (d) FTS5 bm25 over the shipped corpus. Lane (c) exists to isolate what
-the transform contributes to recall versus what ranking contributes. A case counts as
-recalled when the expected page appears in the top 10 results.
-
-**Results** (Unity 6000.3, 39,056 pages, 1008 cases, 8 workers; the checked-in reference
-run is [benchmark-6000.3.json](benchmark-6000.3.json) - consecutive runs reproduce every
-recall count exactly):
+**Comparison results** (Unity 6000.3, 39,056 pages, 1008 cases, 8 workers; the checked-in
+reference run is [benchmark-6000.3.json](benchmark-6000.3.json) - consecutive runs
+reproduce every recall count exactly):
 
 | Lane | Top-10 recall (all) | Manual pages only | Mean query time |
 | --- | --- | --- | --- |
@@ -288,11 +285,14 @@ The four lanes form a ranker x representation matrix, and reading it honestly:
 - **Speed separates FTS from scanning, not the FTS lanes from each other** (~4 ms either
   way once an index exists; a naive scan pays ~207 ms per query against raw HTML).
 
-**Honest limits.** Generated cases use page titles as queries - self-retrieval by a
-page's own name - which favors every lane and makes API-name cases outright easy; real
-agent queries are messier. The 8 curated agent-style cases hint at that messier picture
-(naive raw-HTML scan 5/8, shipped FTS5 7/8, raw-HTML FTS5 7/8 - at n=8 this is anecdote,
-not measurement). Recall@10 says nothing about precision or answer quality. The shipped
+**Honest limits.** The frozen default and comparison cases use page titles as queries -
+self-retrieval by a page's own name - which favors every lane and makes API-name cases
+outright easy. The extended tier replaces titles with body snippets, but it is still
+self-retrieval from target-page text rather than a real information need. The separate
+fixed 100-query [concept suite](concept-queries-6000.3.json) measures hand-curated
+agent-style requests; retrieval-lever outcomes are recorded in
+[retrieval-evaluations-6000.3.md](retrieval-evaluations-6000.3.md). Recall@10 says nothing
+about precision or answer quality. The shipped
 FTS5 lane is only one lane of the actual lookup path: the skills route exact API names
 through `search_index.tsv` first, which covers bm25's characteristic miss (bare class
 names ranked below their member pages). The naive-scan baseline scans page content only
