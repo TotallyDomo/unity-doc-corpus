@@ -149,7 +149,7 @@ func build(source, output string, workers int, keepSource bool) error {
 	defer pageStmt.Close()
 	var ftsStmt *sql.Stmt
 	if fts5 {
-		ftsStmt, err = tx.Prepare("INSERT INTO pages_fts(page_key, title, body) VALUES (?, ?, ?)")
+		ftsStmt, err = tx.Prepare("INSERT INTO pages_fts(rowid, page_key, title, body) VALUES (?, ?, ?, ?)")
 		if err != nil {
 			return err
 		}
@@ -220,14 +220,21 @@ func build(source, output string, workers int, keepSource bool) error {
 			return err
 		}
 		if err := timer.measure("sqlite_insert", func() error {
-			if _, err := pageStmt.Exec(rec.PageKey, rec.Section, rec.PageID, rec.Title, rec.SourceRel, rec.MDRel, rec.CanonicalURL, rec.SourceSHA256, rec.TextSHA256, rec.SourceBytes, rec.TextBytes); err != nil {
+			res, err := pageStmt.Exec(rec.PageKey, rec.Section, rec.PageID, rec.Title, rec.SourceRel, rec.MDRel, rec.CanonicalURL, rec.SourceSHA256, rec.TextSHA256, rec.SourceBytes, rec.TextBytes)
+			if err != nil {
 				return err
 			}
 			if _, err := pageTextStmt.Exec(rec.PageKey, string(rec.MD)); err != nil {
 				return err
 			}
 			if ftsStmt != nil {
-				_, err := ftsStmt.Exec(rec.PageKey, rec.Title, rec.Body)
+				// Pin the FTS rowid to the pages rowid so the contentless table (page_key is
+				// non-retrievable) can be joined back to pages by rowid at search time.
+				rowid, err := res.LastInsertId()
+				if err != nil {
+					return err
+				}
+				_, err = ftsStmt.Exec(rowid, rec.PageKey, rec.Title, rec.Body)
 				return err
 			}
 			return nil
