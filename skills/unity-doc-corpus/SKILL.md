@@ -123,4 +123,5 @@ The checks below read the extracted HTML (`--source unity-docs`), so build with
 - Data egress: none. Everything runs and stays on the local machine.
 - Pinned audit point: audit and pin at the annotated `v1.0.0` tag
   (`git clone --branch v1.0.0 https://github.com/TotallyDomo/unity-doc-corpus`) for a fixed
-  trust point; `main` moves, the tag does not.
+  trust point; `main` moves, the tag does not. The release commit is
+  `7e167743fd59292d66ce674a4229b2ae08b6600e` - pin the hash for tamper-evidence.
