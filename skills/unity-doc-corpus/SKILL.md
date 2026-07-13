@@ -95,8 +95,10 @@ The checks below read the extracted HTML (`--source unity-docs`), so build with
   corpus's `docs.sqlite`, checks their rendered Markdown and metadata, and optionally verifies
   the candidate against source HTML:
   `python scripts/compare_corpus.py --source unity-docs --baseline .cache/corpus-baseline --candidate unity-docs/_agent`
-- Retrieval benchmark with generated title/page-id cases:
-  `bin/unity-doc-corpus-benchmark --source unity-docs --corpus unity-docs/_agent --generated-cases 1000 --output unity-docs/_agent/benchmark-report-expanded.json`
+- Retrieval benchmarks: use `bin/unity-doc-corpus-benchmark --corpus unity-docs/_agent`
+  for the fixed 1,000-case title-derived regression check, add `--extended` for the fixed
+  10,000-case body-snippet tier, or add `--comparison --source unity-docs` for the slower
+  four-lane FTS-versus-scan comparison. `--output report.json` saves any report.
 - Go toolchain changes: run `go mod tidy`, `go vet ./...`, and `go test ./...` from `go/`.
 
 ## Output contract

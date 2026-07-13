@@ -18,10 +18,11 @@ query-side stemming code was required.
 | --- | ---: | ---: | ---: |
 | Concept query recall@10 | 58/100 (58.0%) | 64/100 (64.0%) | +6 |
 | Frozen title-derived recall@10 | 976/1008 (96.8%) | 974/1008 (96.6%) | -2 |
+| Extended body-derived recall@10 | 9264/10008 (92.6%) | 9098/10008 (90.9%) | -166 |
 | Manual title-derived recall@10 | 89/93 | 89/93 | 0 |
 | ScriptReference title-derived recall@10 | 887/915 | 885/915 | -2 |
 
 The candidate passed the content audit: 39,056 pages, zero new content-loss flags,
-and zero collapsed shared-content shingles. It was not adopted because the two-case
-title-derived regression violates the non-regression gate. The production schema
-continues to use the default `unicode61` tokenizer.
+and zero collapsed shared-content shingles. It was not adopted because it regressed the
+frozen title-derived suite by two cases and the broader body-derived suite by 166 cases.
+The production schema continues to use the default `unicode61` tokenizer.
