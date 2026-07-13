@@ -102,3 +102,43 @@ gains. No heading column or weighting change was kept.
 
 This reconciles M51-S4's metadata cleanup: headings remain transient parser output and are not
 preserved in docs.sqlite because this retrieval lever was not adopted.
+
+## Per-heading passage indexing - rejected (2026-07-13)
+
+Hypothesis: replacing one whole-page FTS row with per-heading rows for long Manual pages would
+reduce BM25 length dilution. The measured prototype split only Manual pages with at least 4,000
+body bytes and two parsed passages. Each row carried the page title plus its owning heading and
+body, and ranked passage hits were collapsed to the owning page by best passage rank. Short
+Manual pages and all Scripting API pages retained one row.
+
+The prototype split 829 pages and expanded the FTS index from 39,056 to 46,188 rows. The largest
+fan-out was `Manual/Glossary.html` at 473 passages. `docs.sqlite` grew from 117,301,248 to
+118,120,448 bytes (+819,200 bytes, 0.7%).
+
+| Measurement | Page-level baseline | Passage candidate | Delta |
+| --- | ---: | ---: | ---: |
+| Development concept recall@10, safe fill | 59/100 | 58/100 | -1 |
+| Development Manual recall@10, safe fill | 28/50 | 27/50 | -1 |
+| Held-out concept recall@10, safe fill | 44/200 | 55/200 | +11 |
+| Held-out Manual recall@10, safe fill | 31/100 | 39/100 | +8 |
+| Frozen title-derived recall@10 | 976/1008 | 980/1008 | +4 |
+| Extended body-derived recall@10 | 9264/10008 | 9260/10008 | -4 |
+| Extended Manual recall@10 | 916 | 913 | -3 |
+
+The strict exact-policy result did not support the passage-ranking hypothesis: development
+recall fell from 58/100 to 56/100 (Manual 28/50 to 26/50), while held-out recall stayed 3/200.
+The safe-fill held-out gain came from changed passage-level document frequencies and relaxed
+ranking, not from better strict passage retrieval. That side effect also produced three held-out
+Scripting API gains even though Scripting API pages were not split. It is not a stable basis for
+replacing the authoritative page ranker.
+
+The candidate passed the content audit unchanged: 39,056 pages, 496 baselined flags, zero new or
+stale flags, and zero collapsed shared-content shingles. The prototype left `pages` and
+`page_text` untouched, added a passage-row-to-page-row mapping for FTS, and collapsed read-path
+search results back to page keys; `page` reads and audit semantics therefore remained per-page.
+
+The candidate was rejected and its prototype code was removed because both the development
+concept suite and extended regression suite declined. Production remains one FTS row per page.
+If passage retrieval is revisited, use an isolated sidecar plus an explicitly evaluated fusion
+policy instead of perturbing page-level FTS statistics, cap or exclude extreme glossary/changelog
+fan-out, and use a newly held-out query set because this suite has now informed the design.
