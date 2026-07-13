@@ -26,3 +26,7 @@ The candidate passed the content audit: 39,056 pages, zero new content-loss flag
 and zero collapsed shared-content shingles. It was not adopted because it regressed the
 frozen title-derived suite by two cases and the broader body-derived suite by 166 cases.
 The production schema continues to use the default `unicode61` tokenizer.
+
+Follow-up research, measured query-relaxation prototypes, and the recommended execution
+order are recorded in
+[retrieval-optimization-research-2026-07-13.md](retrieval-optimization-research-2026-07-13.md).
