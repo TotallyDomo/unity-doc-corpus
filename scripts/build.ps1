@@ -24,6 +24,7 @@ $OutDir = Join-Path $RepoRoot "bin"
 $GoRoot = Join-Path $RepoRoot "go"
 $Exe = Join-Path $OutDir "unity-doc-corpus.exe"
 $BenchmarkExe = Join-Path $OutDir "unity-doc-corpus-benchmark.exe"
+$ConceptEvalExe = Join-Path $OutDir "unity-doc-corpus-concept-eval.exe"
 
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 
@@ -34,6 +35,7 @@ Push-Location $GoRoot
 try {
     Invoke-GoStep "go build" @("build", "-trimpath", "-ldflags=-s -w", "-o", $Exe, ".")
     Invoke-GoStep "go build (benchmark)" @("build", "-trimpath", "-ldflags=-s -w", "-o", $BenchmarkExe, ".\cmd\unity-doc-corpus-benchmark")
+    Invoke-GoStep "go build (concept-eval)" @("build", "-trimpath", "-ldflags=-s -w", "-o", $ConceptEvalExe, ".\cmd\unity-doc-corpus-concept-eval")
 }
 finally {
     Pop-Location
@@ -45,6 +47,10 @@ if (!(Test-Path $Exe)) {
 if (!(Test-Path $BenchmarkExe)) {
     throw "Go build did not produce $BenchmarkExe"
 }
+if (!(Test-Path $ConceptEvalExe)) {
+    throw "Go build did not produce $ConceptEvalExe"
+}
 
 Write-Host $Exe
 Write-Host $BenchmarkExe
+Write-Host $ConceptEvalExe
