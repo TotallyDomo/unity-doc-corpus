@@ -38,8 +38,8 @@ below shows, is ~50x slower per lookup and far worse at finding concept pages.
 ```
 Unity offline zip
   -> fetch -> retained zip + disposable extracted HTML
-  -> build -> stripped Markdown + FTS5/TSV indexes + metadata
-  -> lookup -> compact page -> original-source verification when needed
+  -> build -> stripped Markdown in SQLite + FTS5/TSV indexes + metadata
+  -> lookup -> search -> `page` read -> original-source verification when needed
 ```
 
 The retained zip is the local source artifact, the extracted HTML is a rebuild cache, and
@@ -56,9 +56,9 @@ loop back to the original bytes.
 2. **Pure Go, CGO-free.** The builder and benchmark are single static binaries built
    from source (`modernc.org/sqlite`, no C toolchain). No prebuilt binaries are shipped;
    the build recipe is two `go build` lines.
-3. **Plain-file outputs.** Consumers are agents with stock tools: grep, SQLite, a file
-   reader. No server process, no daemon, no protocol dependency. Everything in the
-   corpus is a text file or a SQLite database.
+3. **Plain-file outputs.** Consumers are agents with stock tools: grep, SQLite, and the
+   local builder binary. No server process, no daemon, no protocol dependency. The corpus
+   is a SQLite database plus small text metadata/index files.
 4. **Originals untouched.** Both writers are marker-guarded: `build` only replaces an
    output directory carrying its own corpus marker, and `fetch --force` only replaces a
    destination carrying its own fetch marker. Neither deletes a directory it did not
@@ -86,7 +86,8 @@ loop back to the original bytes.
 2. **build** walks the `Manual/` and `ScriptReference/` HTML trees and transforms every
    page in a worker pool (default: half the logical CPUs). Output order is deterministic:
    files are discovered in sorted order and results are written by job index, so two
-   builds of the same zip produce byte-identical `pages.jsonl` and `search_index.tsv`.
+   builds of the same zip preserve page order and produce the same rendered page payloads
+   and `search_index.tsv`.
 
 ### Artifact lifecycle
 
@@ -99,9 +100,10 @@ lost). A later `build` rematerializes the tree from the zip automatically; `--ke
 keeps it around, which is what you want while iterating on the transform itself. The
 `source` verb prints any page's original HTML from whichever home is on disk - the
 extracted tree or, via cheap random access, the zip member - so per-page verification
-never needs a full re-extract. Steady state on disk: the zip (~475 MB for 6000.3) plus
-the derived corpus (~190 MB); delete the zip too and verification falls back to fetching
-the page's `canonical_url` online.
+never needs a full re-extract. A fresh Unity 6000.3 rebuild on 2026-07-13 measured the
+retained zip at 452 MiB and the derived corpus at 123 MiB (five files, including a 112 MiB
+`docs.sqlite`), for a 575 MiB steady state. Delete the zip too and verification falls back
+to fetching the page's `canonical_url` online.
 
 ### HTML transform
 
@@ -126,7 +128,8 @@ Lossy in structure still needs a strong content-preservation guard. The `audit` 
 (`bin/unity-doc-corpus audit --source unity-docs --corpus unity-docs/_agent --baseline docs/audit-baseline-6000.3.json --shared-baseline docs/shared-content-baseline-6000.3.json`,
 run after every transform change) re-extracts every page's visible text with an
 independent extractor that shares no code with the production parser, shingles it, and
-flags a page when a run of page-unique shingles is missing from its derived Markdown,
+flags a page when a run of page-unique shingles is missing from its derived Markdown read
+from `docs.sqlite`'s `page_text` table,
 with a gating ratio-collapse tier plus an advisory ratio-outlier tier as gross-truncation
 backstops and a source-vs-corpus page-count gate against silent whole-page loss. It
 requires the extracted HTML tree (`build --keep-source`), covers the full corpus in
@@ -188,25 +191,26 @@ above (established by an independent adversarial evaluation, 2026-07-12):
 
 ### Corpus format
 
-Per page, the builder emits a Markdown file under `text/<section>/<page_id>.md` with a
-frontmatter block carrying `section`, `page_id`, `title`, `source_rel`,
-`source_sha256`, and `canonical_url`, followed by the extracted content and a
-deduplicated link list. The frontmatter is the verification path: `source_rel` points
-at the untouched original HTML and `source_sha256` proves which bytes were transformed.
+Per page, the builder renders Markdown with a frontmatter block carrying `section`,
+`page_id`, `title`, `source_rel`, `source_sha256`, and `canonical_url`, followed by the
+extracted content and a deduplicated link list. It stores those exact rendered bytes in the
+`page_text` table in `docs.sqlite`, keyed by `page_key`; `unity-doc-corpus page <page_key>`
+prints them. There is no `text/` directory. The frontmatter is the verification path:
+`source_rel` points at the untouched original HTML and `source_sha256` proves which bytes
+were transformed.
 
 Corpus-level artifacts:
 
-- `search_index.tsv` - one row per page (key, section, id, title, source path, md path,
-  canonical URL). The exact-name lane: whatever text-search tool is on hand (`rg` or `grep`,
-  e.g. `rg -i "AsyncOperation" search_index.tsv`) answers API-name lookups without touching a
+- `search_index.tsv` - one row per page (key, section, id, title, source path, canonical
+  URL). The exact-name lane: whatever text-search tool is on hand (`rg` or `grep`, e.g.
+  `rg -i "AsyncOperation" search_index.tsv`) answers API-name lookups without touching a
   database.
-- `docs.sqlite` - a `pages` metadata table plus a `pages_fts` FTS5 table (title + body)
-  queried with bm25 ranking at a 10:1 title:body weighting (unweighted bm25 buries short
-  canonical pages under their member pages; the weight is measured, see the benchmark).
-  If the SQLite driver lacks FTS5 the build degrades gracefully and records the fact in
-  the manifest.
-- `pages.jsonl` - the full per-page metadata records (byte counts, heading lists, link
-  counts, both SHA-256 hashes) for tooling and benchmark-case generation.
+- `docs.sqlite` - the `pages` metadata table, the `page_text` read table holding the exact
+  rendered Markdown, and a contentless `pages_fts` FTS5 table. The FTS table stores only its
+  inverted index, so the body exists once in `page_text`; it is queried with bm25 at a 10:1
+  title:body weighting (unweighted bm25 buries short canonical pages under their member
+  pages; the weight is measured, see the benchmark). If the SQLite driver lacks FTS5 the
+  build degrades gracefully and records the fact in the manifest.
 - `manifest.json` - build summary: `unity_version` (from the fetch marker; `unknown` when
   the docs were not fetched by this tool), page count, byte totals, derived/source ratio,
   per-stage timings, worker count.
@@ -217,8 +221,8 @@ Corpus-level artifacts:
 Two portable Agent Skills under `skills/`, packaged for Claude Code and Codex, split the
 cost model. `unity-docs` (lookup) is
 the cheap, day-to-day path - exact names via the TSV, concepts via FTS5 (the built-in
-`unity-doc-corpus search` verb, or any SQLite client), then open the Markdown page, then
-verify against the original for load-bearing claims. The
+`unity-doc-corpus search` verb, or any SQLite client), then `unity-doc-corpus page <page_key>`
+to read the Markdown from SQLite, then verify against the original for load-bearing claims. The
 `unity-doc-corpus` skill (builder/maintenance) owns fetch/build/benchmark and only
 fires on explicit request, so an ordinary doc question never triggers a several-hundred-MB
 fetch. Lookup and verification are fully offline while the retained zip or extracted HTML
@@ -236,8 +240,9 @@ bin/unity-doc-corpus-benchmark --source unity-docs --corpus unity-docs/_agent --
 ```
 
 **Cases.** 8 curated lookups (real agent-style queries: API signatures, manual concepts)
-plus 1000 generated cases sampled at an even stride across the whole sorted `pages.jsonl`,
-so the case mix matches the corpus mix (~91% ScriptReference, ~9% Manual). For each
+plus 1000 generated cases sampled at an even stride across the `pages` table ordered by
+section and source path, so the case mix matches the corpus mix (~91% ScriptReference, ~9%
+Manual). For each
 sampled page, the page title (falling back to page id) becomes the query and that page is
 the expected answer. The sample is deterministic - no RNG, same corpus in, same cases out.
 
@@ -259,6 +264,10 @@ recall count exactly):
 | Derived Markdown, naive scan | 958/1008 (95.0%) | 58/93 (62.4%) | ~42 ms |
 | FTS5 bm25 over raw HTML | 977/1008 (96.9%) | 89/93 (95.7%) | ~3.5 ms |
 | FTS5 bm25 over the corpus (shipped) | 976/1008 (96.8%) | 89/93 (95.7%) | ~4.2 ms |
+
+A fresh 2026-07-13 rebuild after the storage consolidation reproduced the two FTS5 recall
+counts exactly: 977/1008 over raw HTML and 976/1008 over the shipped corpus. Moving the
+page-read payload into `docs.sqlite` therefore changed the storage layout, not ranking.
 
 The four lanes form a ranker x representation matrix, and reading it honestly:
 

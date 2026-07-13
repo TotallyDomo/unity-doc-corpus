@@ -6,7 +6,7 @@ description: Fetch Unity's official offline documentation and build, refresh, co
 # unity-doc-corpus (builder)
 
 Build or refresh the agent-friendly derived corpus from Unity's offline HTML documentation:
-stripped Markdown, JSONL metadata, SQLite FTS5 index, exact-name lookup TSV, and benchmark
+stripped Markdown in SQLite, a SQLite FTS5 index, an exact-name lookup TSV, and benchmark
 reports. This is the expensive, explicitly-triggered maintenance workflow; day-to-day doc
 lookups belong to the `unity-docs` skill.
 
@@ -58,7 +58,9 @@ suffix-less (`bin/unity-doc-corpus`); on Windows they resolve to the `.exe` auto
 
 4. Sanity-check the output: `unity-docs/_agent/manifest.json` reports page count and byte
    ratios; `unity-docs/_agent/index.md` describes the corpus layout and lookup order. Quick
-   lookup smoke test: `bin/unity-doc-corpus search --corpus unity-docs/_agent "physics"`.
+   lookup smoke tests: `bin/unity-doc-corpus search --corpus unity-docs/_agent "physics"`
+   followed by `bin/unity-doc-corpus page <page_key>` to read the returned page from
+   `docs.sqlite`.
 
 The builder never modifies the original HTML: it writes a derived `_agent` directory beside
 it and records a SHA-256 per source page. The lookup skill's verification step reads
@@ -89,22 +91,21 @@ The checks below read the extracted HTML (`--source unity-docs`), so build with
   change that legitimately alters shared content. `--output report.json` saves the full
   JSON report. What the audit proves and its documented false-negative classes:
   docs/DESIGN.md.
-- Compare two corpora after changing the builder:
+- Compare two corpora after changing the builder. It reads `pages` and `page_text` from each
+  corpus's `docs.sqlite`, checks their rendered Markdown and metadata, and optionally verifies
+  the candidate against source HTML:
   `python scripts/compare_corpus.py --source unity-docs --baseline .cache/corpus-baseline --candidate unity-docs/_agent`
-- Recall/efficiency benchmark against the original HTML:
-  `python scripts/benchmark_corpus.py --source unity-docs --corpus unity-docs/_agent`
-- Expanded Go benchmark with generated title/page-id cases:
+- Retrieval benchmark with generated title/page-id cases:
   `bin/unity-doc-corpus-benchmark --source unity-docs --corpus unity-docs/_agent --generated-cases 1000 --output unity-docs/_agent/benchmark-report-expanded.json`
 - Go toolchain changes: run `go mod tidy`, `go vet ./...`, and `go test ./...` from `go/`.
 
 ## Output contract
 
-- `_agent/text/Manual/...md` and `_agent/text/ScriptReference/...md` - stripped page content.
-- `_agent/pages.jsonl` - one record per page: source path, title, hashes, canonical URL,
-  derived Markdown path, byte counts.
 - `_agent/search_index.tsv` - exact-name lookup table (page_key, section, page_id, title,
-  source_rel, md_rel, canonical_url).
-- `_agent/docs.sqlite` - `pages` metadata plus `pages_fts` FTS5 table.
+  source_rel, canonical_url).
+- `_agent/docs.sqlite` - `pages` metadata, exact rendered page Markdown in `page_text`, and
+  the contentless `pages_fts` FTS5 index. `bin/unity-doc-corpus page <page_key>` prints the
+  page-read payload; no `text/` directory is created.
 - `_agent/manifest.json` - generation summary; `_agent/benchmark-report*.json` - benchmarks.
 
 ## Trust surface

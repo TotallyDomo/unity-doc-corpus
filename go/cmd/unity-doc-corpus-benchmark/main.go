@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"database/sql"
 	"encoding/json"
 	"flag"
@@ -285,33 +284,37 @@ func rawFTSHits(path, query string) ([]string, time.Duration) {
 }
 
 func generatedCases(corpus string, limit int) ([]benchCase, error) {
-	file, err := os.Open(filepath.Join(corpus, "pages.jsonl"))
+	db, err := sql.Open("sqlite", filepath.Join(corpus, "docs.sqlite"))
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer db.Close()
+	// Preserve the builder's original pages.jsonl order: Manual first, then ScriptReference,
+	// with each section sorted by source path. Generated cases use stride sampling, so changing
+	// this order would change the reference corpus's fixed case set without changing retrieval.
+	rows, err := db.Query("SELECT source_rel, title, page_id FROM pages ORDER BY section, source_rel")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 	var eligible []benchCase
-	scanner := bufio.NewScanner(file)
-	buf := make([]byte, 1024*1024)
-	scanner.Buffer(buf, 16*1024*1024)
-	for scanner.Scan() {
-		var rec struct {
-			SourceRel string `json:"source_rel"`
-			Title     string `json:"title"`
-			PageID    string `json:"page_id"`
+	for rows.Next() {
+		var sourceRel, title, pageID string
+		if err := rows.Scan(&sourceRel, &title, &pageID); err != nil {
+			return nil, err
 		}
-		if json.Unmarshal(scanner.Bytes(), &rec) != nil || rec.SourceRel == "" {
-			continue
+		if sourceRel == "" {
+			return nil, fmt.Errorf("pages table contains a row with no source_rel")
 		}
-		query := rec.Title
+		query := title
 		if len(query) < 4 {
-			query = rec.PageID
+			query = pageID
 		}
 		if len(query) >= 4 {
-			eligible = append(eligible, benchCase{"generated:" + rec.SourceRel, query, rec.SourceRel, true})
+			eligible = append(eligible, benchCase{"generated:" + sourceRel, query, sourceRel, true})
 		}
 	}
-	if err := scanner.Err(); err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	if limit <= 0 || len(eligible) <= limit {

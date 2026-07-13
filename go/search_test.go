@@ -20,8 +20,8 @@ func buildTestCorpus(t *testing.T, dir string, pages []searchHit, bodies map[str
 	for _, p := range pages {
 		key := p.Section + "/" + p.PageID
 		res, err := db.Exec(
-			"INSERT INTO pages VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			key, p.Section, p.PageID, p.Title, p.PageID+".html", "text/"+key+".md", "", "", "", 0, 0,
+			"INSERT INTO pages(page_key, section, page_id, title, source_rel, canonical_url, source_sha256, text_sha256, source_bytes, text_bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			key, p.Section, p.PageID, p.Title, p.Section+"/"+p.PageID+".html", "", make([]byte, 32), make([]byte, 32), 0, 0,
 		)
 		if err != nil {
 			t.Fatalf("insert pages: %v", err)
