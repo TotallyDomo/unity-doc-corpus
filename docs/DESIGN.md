@@ -206,11 +206,13 @@ Corpus-level artifacts:
   `rg -i "AsyncOperation" search_index.tsv`) answers API-name lookups without touching a
   database.
 - `docs.sqlite` - the `pages` metadata table, the `page_text` read table holding the exact
-  rendered Markdown, and a contentless `pages_fts` FTS5 table. The FTS table stores only its
-  inverted index, so the body exists once in `page_text`; it is queried with bm25 at a 10:1
-  title:body weighting (unweighted bm25 buries short canonical pages under their member
-  pages; the weight is measured, see the benchmark). If the SQLite driver lacks FTS5 the
-  build degrades gracefully and records the fact in the manifest.
+  rendered Markdown, a contentless `pages_fts` FTS5 table, and a metadata-only
+  `pages_fts_vocab` virtual table. The FTS table stores only its inverted index, so the body
+  exists once in `page_text`; it is queried with bm25 at a 10:1 title:body weighting
+  (unweighted bm25 buries short canonical pages under their member pages; the weight is
+  measured, see the benchmark). `pages_fts_vocab` exposes FTS5 document frequencies for the
+  adaptive sparse-query policy without duplicating indexed content. If the SQLite driver lacks
+  FTS5 the build degrades gracefully and records the fact in the manifest.
 - `manifest.json` - build summary: `unity_version` (from the fetch marker; `unknown` when
   the docs were not fetched by this tool), page count, byte totals, derived/source ratio,
   per-stage timings, worker count.
@@ -288,10 +290,13 @@ The four lanes form a ranker x representation matrix, and reading it honestly:
 **Honest limits.** The frozen default and comparison cases use page titles as queries -
 self-retrieval by a page's own name - which favors every lane and makes API-name cases
 outright easy. The extended tier replaces titles with body snippets, but it is still
-self-retrieval from target-page text rather than a real information need. The separate
-fixed 100-query [concept suite](concept-queries-6000.3.json) measures hand-curated
-agent-style requests; retrieval-lever outcomes are recorded in
-[retrieval-evaluations-6000.3.md](retrieval-evaluations-6000.3.md). Recall@10 says nothing
+self-retrieval from target-page text rather than a real information need. The separate fixed
+100-query development [concept suite](concept-queries-6000.3.json) and 200-query
+[held-out suite](concept-queries-6000.3-heldout.json) measure hand-curated agent-style
+requests; retrieval-lever outcomes are recorded in
+[retrieval-evaluations-6000.3.md](retrieval-evaluations-6000.3.md). Curation and the held-out
+decision gate are documented in [concept-query-curation-6000.3.md](concept-query-curation-6000.3.md).
+Recall@10 says nothing
 about precision or answer quality. The shipped
 FTS5 lane is only one lane of the actual lookup path: the skills route exact API names
 through `search_index.tsv` first, which covers bm25's characteristic miss (bare class

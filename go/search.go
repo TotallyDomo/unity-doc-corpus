@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unity-doc-corpus/retrieval"
 
 	_ "modernc.org/sqlite"
 )
@@ -78,73 +79,16 @@ func searchCorpus(corpusDir, query string, limit int) ([]searchHit, error) {
 		return nil, err
 	}
 	defer db.Close()
-	// bm25 weights: page_key (unindexed), title, body. Title outweighs body 10:1 - measured
-	// on the reference benchmark, unweighted bm25 buries short canonical pages (a bare class
-	// name ranks the class page below its member pages).
-	// pages_fts is contentless (M51-S2): f.page_key is not retrievable, so join on rowid,
-	// which build.go pins equal to the pages rowid. bm25 weights are unchanged.
-	const q = `SELECT p.section, p.page_id, p.title, p.page_key
-FROM pages_fts f JOIN pages p ON p.rowid = f.rowid
-WHERE pages_fts MATCH ?
-ORDER BY bm25(pages_fts, 0.0, 10.0, 1.0) LIMIT ?`
-	rows, err := db.Query(q, query, limit)
+	// The shared policy quotes normalized query terms, so punctuation and FTS operators are
+	// literal user input. Safe fill retains every exact implicit-AND result in its original
+	// rank before it considers a document-frequency-guided relaxation.
+	hits, _, err := retrieval.New(db).Search(query, limit, retrieval.StrategySafeFill)
 	if err != nil {
-		// Raw FTS5 parsing choked (dots in API names, stray operators, unbalanced quotes,
-		// bareword AND/OR/NOT). Retry once with the query reduced to plain alphanumeric terms,
-		// each double-quoted so FTS5 reads them as literals rather than operators. Any first
-		// query error takes this path: with a valid database the only failures here are query
-		// parse errors, and one extra retry against a genuinely broken database is harmless.
-		if quoted := ftsQuoteTerms(ftsSanitize(query)); quoted != "" {
-			rows, err = db.Query(q, quoted, limit)
-		}
+		return nil, fmt.Errorf("FTS query failed (was the corpus built with FTS5 support? check manifest.json sqlite_fts5): %w", err)
 	}
-	if err != nil {
-		return nil, fmt.Errorf("FTS query failed even after sanitizing (was the corpus built with FTS5 support? check manifest.json sqlite_fts5): %w", err)
+	result := make([]searchHit, len(hits))
+	for i, hit := range hits {
+		result[i] = searchHit{Section: hit.Section, PageID: hit.PageID, Title: hit.Title, PageKey: hit.PageKey}
 	}
-	defer rows.Close()
-	var hits []searchHit
-	for rows.Next() {
-		var h searchHit
-		if err := rows.Scan(&h.Section, &h.PageID, &h.Title, &h.PageKey); err != nil {
-			return nil, err
-		}
-		hits = append(hits, h)
-	}
-	return hits, rows.Err()
-}
-
-// ftsSanitize reduces a query to space-separated alphanumeric terms - the same shape the
-// benchmark feeds FTS5 - dropping single-character fragments.
-func ftsSanitize(query string) string {
-	var terms []string
-	var b strings.Builder
-	flush := func() {
-		if b.Len() > 1 {
-			terms = append(terms, b.String())
-		}
-		b.Reset()
-	}
-	for _, r := range query {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
-			b.WriteRune(r)
-		} else {
-			flush()
-		}
-	}
-	flush()
-	return strings.Join(terms, " ")
-}
-
-// ftsQuoteTerms wraps each space-separated term in FTS5 string quotes, so sanitized barewords
-// that collide with FTS5 operators (AND, OR, NOT, NEAR) match as literal terms instead of
-// erroring. Input comes from ftsSanitize, so the terms are plain alphanumerics.
-func ftsQuoteTerms(sanitized string) string {
-	if sanitized == "" {
-		return ""
-	}
-	terms := strings.Fields(sanitized)
-	for i, t := range terms {
-		terms[i] = `"` + t + `"`
-	}
-	return strings.Join(terms, " ")
+	return result, nil
 }

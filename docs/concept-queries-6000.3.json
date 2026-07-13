@@ -1,5 +1,6 @@
 {
   "corpus_version": "6000.3",
+  "role": "development",
   "method": "Hand-curated on 2026-07-13 from compact Unity agent-style concept queries. Each query was written without copying its target page title or source path. Gold pages were checked against the local Unity 6000.3 source tree, then the runner verifies that every gold source_rel is present in the built corpus. The suite deliberately balances 50 Manual and 50 Scripting API cases; it is a fixed regression set, not a generated title-query sample.",
   "baseline": {
     "evaluated_at": "2026-07-13",

@@ -58,6 +58,15 @@ func createSQLite(path string) (*sql.DB, bool, error) {
 		fts5 = false
 
 	}
+	if fts5 {
+		// fts5vocab is metadata only: it exposes document frequencies from pages_fts without
+		// duplicating the indexed payload. Adaptive retrieval uses it to drop the least
+		// discriminative term when a strict implicit-AND query is genuinely sparse.
+		if _, err = db.Exec("CREATE VIRTUAL TABLE pages_fts_vocab USING fts5vocab(pages_fts, row)"); err != nil {
+			db.Close()
+			return nil, false, err
+		}
+	}
 
 	return db, fts5, nil
 
