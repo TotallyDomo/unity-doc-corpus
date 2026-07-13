@@ -150,7 +150,7 @@ Reference corpus: Unity 6000.3. The checked-in run is
 The important result is recall parity, not a claim that stripping HTML improves ranking:
 with the same ranker, the corpus and raw HTML differ by one case in 1000. A fresh
 post-consolidation rebuild reproduced both FTS5 counts exactly. The gain is that the pages
-agents read are about 90% smaller and the equivalent search index is about 10x smaller.
+agents read are about 90% smaller and the equivalent search index is about 7x smaller.
 Generated cases use page titles and ids, so they are easier than real agent questions; the
 benchmark's limits and four-lane methodology are documented in
 [`docs/DESIGN.md`](docs/DESIGN.md#benchmark).

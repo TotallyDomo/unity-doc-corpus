@@ -50,12 +50,13 @@ loop back to the original bytes.
 ## Constraints
 
 1. **No Unity content redistribution.** Unity's documentation belongs to Unity. The
-   repository contains tooling only; the user fetches Unity's official offline zip
-   themselves and the corpus is derived locally. Nothing doc-derived is ever committed -
-   not in the tree, not in git history.
-2. **Pure Go, CGO-free.** The builder and benchmark are single static binaries built
-   from source (`modernc.org/sqlite`, no C toolchain). No prebuilt binaries are shipped;
-   the build recipe is two `go build` lines.
+   repository ships tooling and content-free evaluation artifacts (page keys, recall
+   counts, shingle fingerprints - never page text); the user fetches Unity's official
+   offline zip themselves and the corpus is derived locally. No documentation content is
+   ever committed - not in the tree, not in git history.
+2. **Pure Go, CGO-free.** The builder, benchmark, and concept evaluator are single
+   static binaries built from source (`modernc.org/sqlite`, no C toolchain). No prebuilt
+   binaries are shipped; each tool is one `go build` line.
 3. **Plain-file outputs.** Consumers are agents with stock tools: grep, SQLite, and the
    local builder binary. No server process, no daemon, no protocol dependency. The corpus
    is a SQLite database plus small text metadata/index files.
@@ -218,6 +219,22 @@ Corpus-level artifacts:
   per-stage timings, worker count.
 - `index.md` + a `.unity-doc-agent-corpus` marker (the overwrite guard).
 
+### Adaptive retrieval policy
+
+The `search` verb runs an exact-first adaptive policy on top of the weighted bm25 index,
+adopted 2026-07-13 after held-out measurement. The strict implicit-AND query runs first
+and is authoritative. When it returns fewer than seven hits, one relaxed query drops the
+least discriminative term (the highest document frequency, read from `pages_fts_vocab`);
+a full-OR query is a final fallback only after an empty strict result and a still-short
+relaxed fill. Relaxed and fallback hits are safe-filled: appended after the exact
+ranking, never displacing or reordering an exact result, so exact-query behavior is
+unchanged. On the 200-query held-out concept suite this lifted recall@10 from 3/200 to
+44/200 with no change to the frozen title-derived or extended body-derived suites. The
+per-lever record - including the rejected alternatives (global Porter stemming and a
+Porter sidecar, a heading-weighted column, per-heading passage indexing, query aliases) -
+is [retrieval-evaluations-6000.3.md](retrieval-evaluations-6000.3.md); both evaluation
+binaries take `--policy exact|safe-fill|fused` to reproduce the comparisons.
+
 ### Lookup path (the skills)
 
 Two portable Agent Skills under `skills/`, packaged for Claude Code and Codex, split the
@@ -273,8 +290,9 @@ The four lanes form a ranker x representation matrix, and reading it honestly:
 - **Ranking, not the transform, owns recall.** Holding bm25 fixed and swapping the
   representation (raw HTML vs derived corpus) moves recall by one case in a thousand.
   Anyone with the offline zip and SQLite can have this recall without this tool - the raw
-  index just costs ~860 MB on disk versus the corpus's ~84 MB, and every page read out of
-  it costs ~9x the bytes in an agent's context.
+  index just costs ~860 MB on disk versus the corpus's 112 MiB `docs.sqlite` (which also
+  holds the page-read payload), and every page read out of it costs ~9x the bytes in an
+  agent's context.
 - **Where ranking matters is concept pages.** On ScriptReference cases every lane
   saturates - an API page's own name is a near-unique string, so even a naive scan finds
   it. Manual concept pages, whose titles are ordinary prose, are where naive scanning
