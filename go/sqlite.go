@@ -21,7 +21,7 @@ func createSQLite(path string) (*sql.DB, bool, error) {
 
 	}
 
-	_, err = db.Exec("CREATE TABLE pages (page_key TEXT PRIMARY KEY, section TEXT, page_id TEXT, title TEXT, source_rel TEXT, md_rel TEXT, canonical_url TEXT, source_sha256 TEXT, text_sha256 TEXT, source_bytes INTEGER, text_bytes INTEGER)")
+	_, err = db.Exec("CREATE TABLE pages (page_key TEXT PRIMARY KEY, section TEXT NOT NULL, page_id TEXT NOT NULL, title TEXT NOT NULL, source_rel TEXT UNIQUE NOT NULL, canonical_url TEXT NOT NULL, source_sha256 BLOB NOT NULL, text_sha256 BLOB NOT NULL, source_bytes INTEGER NOT NULL, text_bytes INTEGER NOT NULL)")
 
 	if err != nil {
 

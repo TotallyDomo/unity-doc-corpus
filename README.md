@@ -5,9 +5,9 @@
 [![gitleaks](https://github.com/TotallyDomo/unity-doc-corpus/actions/workflows/gitleaks.yml/badge.svg)](https://github.com/TotallyDomo/unity-doc-corpus/actions/workflows/gitleaks.yml)
 
 Turn Unity's official offline documentation into a version-pinned local search corpus for
-coding agents: stripped Markdown for cheap reads, SQLite FTS5 for concept search, and an
-exact-name index for API lookup. The pure-Go (CGO-free) builder runs entirely on your
-machine.
+coding agents: stripped Markdown served from SQLite for cheap reads, SQLite FTS5 for concept
+search, and an exact-name index for API lookup. The pure-Go (CGO-free) builder runs entirely
+on your machine.
 
 No Unity documentation content lives in this repository. You fetch Unity's official
 offline docs zip yourself, and the builder derives the corpus locally. The repository
@@ -27,20 +27,19 @@ package manuals, including URP, are bundled into the Manual; most package API re
 (`com.unity.*`) ships separately and is not included. This is a local corpus builder, not
 an editor-control MCP server and not a redistribution of Unity's documentation.
 
-The default steady-state footprint for Unity 6000.3 is about 665 MB: a retained ~475 MB
-source zip plus ~190 MB of derived content. The corpus occupies more on disk than its
-logical size - roughly 300 MB on a typical NTFS volume - because it is ~39k small files
-carrying per-file allocation overhead. You can delete the zip for a ~190 MB footprint, but
-then exact source verification needs the pinned online page and rebuilding needs a re-fetch.
+The default steady-state footprint for Unity 6000.3 is 575 MiB (603 MB), measured from a
+fresh 2026-07-13 rebuild: a retained 452 MiB source zip plus a 123 MiB derived corpus. The
+derived corpus is five files, not ~39k small Markdown files; `docs.sqlite` is 112 MiB and
+holds both the page-read payload and the FTS index. You can delete the zip for a 123 MiB
+footprint, but then exact source verification needs the pinned online page and rebuilding
+needs a re-fetch.
 
 ## What it builds
 
 | Artifact | Purpose |
 | --- | --- |
-| `text/` | Stripped Markdown pages for token-lean reads |
-| `docs.sqlite` | Title-weighted FTS5 index for concept search |
+| `docs.sqlite` | Per-page Markdown (`page_text`), metadata, and title-weighted FTS5 |
 | `search_index.tsv` | Exact-name lookup for APIs and pages |
-| `pages.jsonl` | Per-page metadata, source paths, and hashes |
 | `manifest.json` | Unity version, page counts, sizes, and build summary |
 
 Every Markdown page records the original source path and SHA-256. The transform is
@@ -88,13 +87,16 @@ budget 2-3x on a cold file cache. After a successful build, extracted HTML is pr
 the retained zip can rematerialize it. Pass `--keep-source` while developing the transform
 or before running the audit.
 
-**4. Search:**
+**4. Search and read:**
 
 ```
 bin/unity-doc-corpus search "script execution order"
+bin/unity-doc-corpus page Manual/execution-order
 ```
 
-No sqlite3 CLI or Python is needed. To inspect the untouched page behind a result:
+`search` returns page keys; `page` prints the matching stripped Markdown from
+`docs.sqlite`. No sqlite3 CLI or Python is needed. To inspect the untouched page behind a
+result:
 
 ```
 bin/unity-doc-corpus source Manual/execution-order.html
@@ -138,17 +140,18 @@ Reference corpus: Unity 6000.3. The checked-in run is
 | --- | --- |
 | Pages transformed | 39,056 |
 | Source HTML | 648 MB |
-| Derived Markdown | 62 MB (9.5% of source bytes) |
+| Derived Markdown payload | 62 MB (9.5% of source bytes, stored in `docs.sqlite`) |
 | Corpus FTS5 top-10 recall | 96.8% (976/1008) |
 | Same bm25 over raw HTML | 96.9% (977/1008) |
-| Corpus vs. raw FTS5 index | ~84 MB vs. ~860 MB |
+| Corpus `docs.sqlite` vs. raw FTS5 index | 112 MiB vs. ~860 MB |
 | Mean corpus FTS5 query | ~4.2 ms |
 
 The important result is recall parity, not a claim that stripping HTML improves ranking:
-with the same ranker, the corpus and raw HTML differ by one case in 1000. The gain is that
-the pages agents read are about 90% smaller and the equivalent search index is about 10x
-smaller. Generated cases use page titles and ids, so they are easier than real agent
-questions; the benchmark's limits and four-lane methodology are documented in
+with the same ranker, the corpus and raw HTML differ by one case in 1000. A fresh
+post-consolidation rebuild reproduced both FTS5 counts exactly. The gain is that the pages
+agents read are about 90% smaller and the equivalent search index is about 10x smaller.
+Generated cases use page titles and ids, so they are easier than real agent questions; the
+benchmark's limits and four-lane methodology are documented in
 [`docs/DESIGN.md`](docs/DESIGN.md#benchmark).
 
 The separate `audit` command guards the transform against word-token content loss. It
@@ -172,14 +175,15 @@ bin/unity-doc-corpus-benchmark --source unity-docs --corpus unity-docs/_agent --
 ```
 Unity offline zip
   -> fetch -> retained zip + disposable extracted HTML
-  -> build -> Markdown + FTS5/TSV indexes + metadata
-  -> lookup -> compact page -> original-source verification when needed
+  -> build -> page Markdown in SQLite + FTS5/TSV indexes + metadata
+  -> lookup -> search -> `page` read -> original-source verification when needed
 ```
 
 `fetch` only accepts Unity's pinned documentation hosts and extracts the Manual and
-ScriptReference trees. `build` transforms each page and writes deterministic page/index
-content. Agents use exact-name lookup for API pages, FTS5 for concepts, and the untouched
-HTML for details the lossy representation cannot preserve exactly.
+ScriptReference trees. `build` transforms each page and stores the byte-identical rendered
+Markdown in `docs.sqlite`; it writes the TSV exact-name index alongside it. Agents use
+exact-name lookup for API pages, FTS5 for concepts, `page` for the read payload, and the
+untouched HTML for details the lossy representation cannot preserve exactly.
 
 The full technical design covers constraints, artifact lifecycle, corpus format, audit
 semantics, benchmark methodology, and comparisons with Context7, unity-api-mcp, and the

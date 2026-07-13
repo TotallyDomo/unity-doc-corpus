@@ -11,7 +11,8 @@ fallback is named in step 5 and the trust surface.
 
 The corpus root is the builder's `--output` directory - by default `unity-docs/_agent` under
 the repository where the builder ran. A valid corpus root contains a `.unity-doc-agent-corpus`
-marker file plus `manifest.json`, `search_index.tsv`, `docs.sqlite`, and `text/`. If no corpus
+marker file plus `manifest.json`, `search_index.tsv`, and `docs.sqlite`. Page Markdown is
+served from the `page_text` table in `docs.sqlite`; there is no `text/` directory. If no corpus
 root is known or present, ask the user for its location or to run the builder quickstart (a
 one-time several-hundred-MB fetch plus a fast local build); do not build it unprompted.
 
@@ -27,7 +28,7 @@ empty, say the corpus does not cover it rather than concluding the API does not 
    (`unity_version` is `unknown` when the docs were not fetched by this tool - then ask the
    user which version their docs are.)
 2. Exact API, class, or page names: search `search_index.tsv`. It is a plain TSV with header
-   `page_key  section  page_id  title  source_rel  md_rel  canonical_url`. Use the available
+   `page_key  section  page_id  title  source_rel  canonical_url`. Use the available
    text-search tool against the title or page-id column, for example
    `rg -i "AsyncOperation" search_index.tsv`.
 3. Concept or free-text queries: FTS5 over `docs.sqlite`. If the `unity-doc-corpus` builder
@@ -41,13 +42,18 @@ empty, say the corpus does not cover it rather than concluding the API does not 
    or Python's built-in `sqlite3` module if the CLI is missing:
 
    ```
-   sqlite3 <corpus-root>/docs.sqlite "SELECT p.title, p.md_rel FROM pages_fts f JOIN pages p ON p.page_key = f.page_key WHERE pages_fts MATCH 'script execution order' ORDER BY bm25(pages_fts, 0.0, 10.0, 1.0) LIMIT 10;"
+   sqlite3 <corpus-root>/docs.sqlite "SELECT p.title, p.page_key FROM pages_fts f JOIN pages p ON p.rowid = f.rowid WHERE pages_fts MATCH 'script execution order' ORDER BY bm25(pages_fts, 0.0, 10.0, 1.0) LIMIT 10;"
    ```
 
    The bm25 weights (title 10x body) matter: unweighted bm25 buries short canonical pages
    under their member pages. The built-in `search` verb applies them for you.
-4. Open the matching stripped Markdown page under `text/Manual/...` or
-   `text/ScriptReference/...` (the `md_rel` column points at it).
+4. Read the matching stripped Markdown through the builder's `page` verb:
+
+   ```
+   unity-doc-corpus page <page_key>
+   ```
+
+   It prints the exact rendered Markdown stored in `docs.sqlite`.
 5. When an answer hinges on one page's exact details (table values, code, version
    caveats), re-read the original HTML - the transform is deliberately lossy (tables
    flatten, code loses fencing) and the corpus is a lookup cache, not the source of truth.

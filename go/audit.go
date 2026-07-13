@@ -57,7 +57,7 @@ package main
 //     floor catches only large losses of that shape.
 
 import (
-	"bufio"
+	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -86,14 +86,12 @@ type pageRef struct {
 	PageKey   string
 	Section   string
 	SourceRel string
-	MDRel     string
 }
 
 type auditFlag struct {
 	PageKey       string   `json:"page_key"`
 	Section       string   `json:"section"`
 	SourceRel     string   `json:"source_rel"`
-	MDRel         string   `json:"md_rel"`
 	RefTokens     int      `json:"ref_tokens"`
 	MDTokens      int      `json:"md_tokens"`
 	Ratio         float64  `json:"derived_to_ref_token_ratio"`
@@ -303,12 +301,12 @@ func auditCorpus(source, corpus string, workers int, cfg auditConfig, shared *sh
 		return nil, err
 	}
 	if len(pages) == 0 {
-		return nil, fmt.Errorf("no pages found in %s (is the corpus built?)", filepath.Join(corpusAbs, "pages.jsonl"))
+		return nil, fmt.Errorf("no pages found in %s (is the corpus built?)", filepath.Join(corpusAbs, "docs.sqlite"))
 	}
 
 	// Whole-page-loss gate: require an exact source-path bijection, not only equal counts. A
-	// duplicate pages.jsonl record could otherwise replace an omitted source page while keeping
-	// cardinality unchanged and silently leave that page unaudited.
+	// duplicate or mismapped pages row could otherwise replace an omitted source page while
+	// keeping cardinality unchanged and silently leave that page unaudited.
 	sourceFiles, err := collectSectionHTML(sourceAbs)
 	if err != nil {
 		return nil, err
@@ -737,7 +735,7 @@ func auditPage(p pageRef, refTokens, mdTokens []string, df, mdDF *dfCounter, cfg
 		fp := shingleFingerprint(refTokens)
 		if !isChrome(fp) && !containsSubsequence(mdTokens, refTokens) {
 			return &auditFlag{
-				PageKey: p.PageKey, Section: p.Section, SourceRel: p.SourceRel, MDRel: p.MDRel,
+				PageKey: p.PageKey, Section: p.Section, SourceRel: p.SourceRel,
 				MissingWindow: 1, MissingSpans: 1,
 				Quotes: []string{clip(strings.Join(refTokens, " "))},
 			}
@@ -789,7 +787,7 @@ func auditPage(p pageRef, refTokens, mdTokens []string, df, mdDF *dfCounter, cfg
 		quotes = append(quotes, clip(strings.Join(refTokens[s[0]:s[1]], " ")))
 	}
 	return &auditFlag{
-		PageKey: p.PageKey, Section: p.Section, SourceRel: p.SourceRel, MDRel: p.MDRel,
+		PageKey: p.PageKey, Section: p.Section, SourceRel: p.SourceRel,
 		MissingWindow: missingWindows, MissingSpans: len(spans), Quotes: quotes,
 	}
 }
@@ -822,7 +820,7 @@ func markRatioOutliers(pages []pageRef, ratios []float64, refTok, mdTok []int, f
 			if flags[i] == nil {
 				flags[i] = &auditFlag{
 					PageKey: pages[i].PageKey, Section: pages[i].Section,
-					SourceRel: pages[i].SourceRel, MDRel: pages[i].MDRel,
+					SourceRel: pages[i].SourceRel,
 					RefTokens: refTok[i], MDTokens: mdTok[i], Ratio: ratios[i],
 				}
 			}
@@ -876,86 +874,76 @@ func clip(s string) string {
 	return s[:cut] + "..."
 }
 
-// loadPageRefs reads the corpus pages.jsonl into the page list the audit iterates.
+// loadPageRefs reads the pages table in docs.sqlite into the page list the audit iterates.
 func loadPageRefs(corpusAbs string) ([]pageRef, error) {
-	path := filepath.Join(corpusAbs, "pages.jsonl")
-	f, err := os.Open(path)
-	if err != nil {
+	dbPath := filepath.Join(corpusAbs, "docs.sqlite")
+	if _, err := os.Stat(dbPath); err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("%s not found (is the corpus built? run: bin/unity-doc-corpus build --source <docs-root> --output %s)", path, corpusAbs)
+			return nil, fmt.Errorf("%s not found (is the corpus built? run: bin/unity-doc-corpus build --source <docs-root> --output %s)", dbPath, corpusAbs)
 		}
 		return nil, err
 	}
-	defer f.Close()
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	rows, err := db.Query("SELECT page_key, section, source_rel FROM pages ORDER BY page_key")
+	if err != nil {
+		return nil, fmt.Errorf("reading pages from %s (is the corpus built with this tool? rebuild it): %w", dbPath, err)
+	}
+	defer rows.Close()
 	var pages []pageRef
 	pageKeys := map[string]struct{}{}
 	sourcePaths := map[string]struct{}{}
-	mdPaths := map[string]struct{}{}
-	scanner := bufio.NewScanner(f)
-	buf := make([]byte, 1024*1024)
-	scanner.Buffer(buf, 16*1024*1024)
-	line := 0
-	for scanner.Scan() {
-		line++
-		if len(strings.TrimSpace(string(scanner.Bytes()))) == 0 {
-			continue
+	rowNum := 0
+	for rows.Next() {
+		rowNum++
+		var rec pageRef
+		if err := rows.Scan(&rec.PageKey, &rec.Section, &rec.SourceRel); err != nil {
+			return nil, fmt.Errorf("%s row %d: malformed page record (%v) - rebuild the corpus", dbPath, rowNum, err)
 		}
-		var rec struct {
-			PageKey   string `json:"page_key"`
-			Section   string `json:"section"`
-			SourceRel string `json:"source_rel"`
-			MDRel     string `json:"md_rel"`
-		}
-		// A malformed or field-less record is corpus corruption, not noise to skip: silently
+		// A malformed or field-less row is corpus corruption, not noise to skip: silently
 		// dropping it would shrink the audited page set - the same class as silent page loss.
-		if err := json.Unmarshal(scanner.Bytes(), &rec); err != nil {
-			return nil, fmt.Errorf("%s line %d: malformed page record (%v) - rebuild the corpus", path, line, err)
-		}
-		if rec.PageKey == "" || rec.Section == "" || rec.SourceRel == "" || rec.MDRel == "" {
-			return nil, fmt.Errorf("%s line %d: page record missing page_key/section/source_rel/md_rel - rebuild the corpus", path, line)
+		if rec.PageKey == "" || rec.Section == "" || rec.SourceRel == "" {
+			return nil, fmt.Errorf("%s row %d: page record missing page_key/section/source_rel - rebuild the corpus", dbPath, rowNum)
 		}
 		validSection := false
 		for _, section := range sectionDirs {
 			validSection = validSection || rec.Section == section
 		}
 		if !validSection {
-			return nil, fmt.Errorf("%s line %d: invalid section %q - rebuild the corpus", path, line, rec.Section)
+			return nil, fmt.Errorf("%s row %d: invalid section %q - rebuild the corpus", dbPath, rowNum, rec.Section)
 		}
-		for label, value := range map[string]string{"source_rel": rec.SourceRel, "md_rel": rec.MDRel} {
+		for label, value := range map[string]string{"source_rel": rec.SourceRel} {
 			if strings.Contains(value, "\\") || pathpkg.Clean(value) != value || pathpkg.IsAbs(value) || value == "." || strings.HasPrefix(value, "../") {
-				return nil, fmt.Errorf("%s line %d: non-canonical or escaping %s %q - rebuild the corpus", path, line, label, value)
+				return nil, fmt.Errorf("%s row %d: non-canonical or escaping %s %q - rebuild the corpus", dbPath, rowNum, label, value)
 			}
 		}
 		if !strings.HasPrefix(rec.SourceRel, rec.Section+"/") || !strings.EqualFold(pathpkg.Ext(rec.SourceRel), ".html") {
-			return nil, fmt.Errorf("%s line %d: source_rel %q does not match section %q - rebuild the corpus", path, line, rec.SourceRel, rec.Section)
-		}
-		if !strings.HasPrefix(rec.MDRel, "text/"+rec.Section+"/") || !strings.EqualFold(pathpkg.Ext(rec.MDRel), ".md") {
-			return nil, fmt.Errorf("%s line %d: md_rel %q does not match section %q - rebuild the corpus", path, line, rec.MDRel, rec.Section)
+			return nil, fmt.Errorf("%s row %d: source_rel %q does not match section %q - rebuild the corpus", dbPath, rowNum, rec.SourceRel, rec.Section)
 		}
 		sectionRel := strings.TrimPrefix(rec.SourceRel, rec.Section+"/")
 		expectedKey := rec.Section + "/" + strings.TrimSuffix(sectionRel, ".html")
-		expectedMD := "text/" + expectedKey + ".md"
-		if rec.PageKey != expectedKey || rec.MDRel != expectedMD {
-			return nil, fmt.Errorf("%s line %d: record identity mismatch: source_rel %q requires page_key %q and md_rel %q - rebuild the corpus", path, line, rec.SourceRel, expectedKey, expectedMD)
+		if rec.PageKey != expectedKey {
+			return nil, fmt.Errorf("%s row %d: record identity mismatch: source_rel %q requires page_key %q - rebuild the corpus", dbPath, rowNum, rec.SourceRel, expectedKey)
 		}
-		for label, value := range map[string]string{"page_key": rec.PageKey, "source_rel": rec.SourceRel, "md_rel": rec.MDRel} {
+		for label, value := range map[string]string{"page_key": rec.PageKey, "source_rel": rec.SourceRel} {
 			var seen map[string]struct{}
 			switch label {
 			case "page_key":
 				seen = pageKeys
-			case "source_rel":
-				seen = sourcePaths
 			default:
-				seen = mdPaths
+				seen = sourcePaths
 			}
 			if _, ok := seen[value]; ok {
-				return nil, fmt.Errorf("%s line %d: duplicate %s %q - rebuild the corpus", path, line, label, value)
+				return nil, fmt.Errorf("%s row %d: duplicate %s %q - rebuild the corpus", dbPath, rowNum, label, value)
 			}
 			seen[value] = struct{}{}
 		}
-		pages = append(pages, pageRef{PageKey: rec.PageKey, Section: rec.Section, SourceRel: rec.SourceRel, MDRel: rec.MDRel})
+		pages = append(pages, rec)
 	}
-	return pages, scanner.Err()
+	return pages, rows.Err()
 }
 
 // auditParallel runs fn over indices [0,count) on a fixed worker pool, returning the first
@@ -1036,7 +1024,7 @@ func printAuditReport(w *os.File, res *auditResult, base *auditBaseline, shared 
 				kind = "ratio-collapse"
 			}
 		}
-		fmt.Fprintf(w, "[%s] %s\n  source: %s\n  md:     %s\n", kind, f.PageKey, f.SourceRel, f.MDRel)
+		fmt.Fprintf(w, "[%s] %s\n  source: %s\n  page:   unity-doc-corpus page %s\n", kind, f.PageKey, f.SourceRel, f.PageKey)
 		fmt.Fprintf(w, "  ref_tokens=%d md_tokens=%d ratio=%.3f", f.RefTokens, f.MDTokens, f.Ratio)
 		if f.MissingSpans > 0 {
 			fmt.Fprintf(w, " missing_spans=%d missing_shingles=%d", f.MissingSpans, f.MissingWindow)

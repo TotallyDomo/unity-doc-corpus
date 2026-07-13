@@ -9,19 +9,19 @@ package main
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
 	"unicode/utf8"
 )
 
-// writePageTextDB writes a docs.sqlite under corpusDir holding the page_text table the audit now
-// reads Markdown from (the DB read that replaced the on-disk text/ directory). mdByKey maps
-// page_key -> rendered Markdown.
+// writePageTextDB writes a docs.sqlite under corpusDir holding the pages metadata and page_text
+// rows the audit reads. Fixture keys use the builder's normal section/page-id shape, so their
+// source paths are derivable as <page_key>.html.
 func writePageTextDB(t *testing.T, corpusDir string, mdByKey map[string]string) {
 	t.Helper()
 	db, _, err := createSQLite(filepath.Join(corpusDir, "docs.sqlite"))
@@ -29,7 +29,25 @@ func writePageTextDB(t *testing.T, corpusDir string, mdByKey map[string]string) 
 		t.Fatalf("createSQLite: %v", err)
 	}
 	defer db.Close()
-	for key, md := range mdByKey {
+	keys := make([]string, 0, len(mdByKey))
+	for key := range mdByKey {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	pageStmt, err := db.Prepare("INSERT INTO pages(page_key, section, page_id, title, source_rel, canonical_url, source_sha256, text_sha256, source_bytes, text_bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+	if err != nil {
+		t.Fatalf("prepare pages: %v", err)
+	}
+	defer pageStmt.Close()
+	for _, key := range keys {
+		md := mdByKey[key]
+		parts := strings.SplitN(key, "/", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			t.Fatalf("fixture page key %q is not section/page-id", key)
+		}
+		if _, err := pageStmt.Exec(key, parts[0], parts[1], parts[1], key+".html", "", make([]byte, 32), make([]byte, 32), 0, len(md)); err != nil {
+			t.Fatalf("insert pages: %v", err)
+		}
 		if _, err := db.Exec("INSERT INTO page_text(page_key, md) VALUES (?, ?)", key, md); err != nil {
 			t.Fatalf("insert page_text: %v", err)
 		}
@@ -48,6 +66,15 @@ func setPageTextDB(t *testing.T, corpusDir, key, md string) {
 	if _, err := db.Exec("INSERT OR REPLACE INTO page_text(page_key, md) VALUES (?, ?)", key, md); err != nil {
 		t.Fatalf("update page_text: %v", err)
 	}
+}
+
+func openCorpusDB(t *testing.T, corpusDir string) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", filepath.Join(corpusDir, "docs.sqlite"))
+	if err != nil {
+		t.Fatalf("open docs.sqlite: %v", err)
+	}
+	return db
 }
 
 // fixtureChrome is the corpus-uniform chrome sentence shared by every fixture page. With
@@ -94,7 +121,6 @@ func buildAuditFixture(t *testing.T) (string, string) {
 	}
 
 	mdByKey := map[string]string{}
-	var jsonl strings.Builder
 	for p := 0; p < fixturePageCount; p++ {
 		name := fmt.Sprintf("Page%02d", p)
 		key := "Manual/" + name
@@ -141,12 +167,6 @@ func buildAuditFixture(t *testing.T) (string, string) {
 		md := "---\ntitle: " + name + "\n---\n\n" + strings.Join(mdParas, "\n\n") + "\n"
 		mdByKey[key] = md
 
-		jsonl.WriteString(fmt.Sprintf(
-			`{"page_key":%q,"section":"Manual","source_rel":"Manual/%s.html","md_rel":"text/Manual/%s.md"}`+"\n",
-			key, name, name))
-	}
-	if err := os.WriteFile(filepath.Join(corpusDir, "pages.jsonl"), []byte(jsonl.String()), 0o644); err != nil {
-		t.Fatal(err)
 	}
 	writePageTextDB(t, corpusDir, mdByKey)
 	return sourceDir, corpusDir
@@ -424,10 +444,6 @@ func TestAuditFlagsLossAfterVoidCloseTag(t *testing.T) {
 		t.Fatal(err)
 	}
 	md := "---\ntitle: VoidClose\n---\n\nVoidClose\n\n" + kept + "\n"
-	jsonl := `{"page_key":"Manual/VoidClose","section":"Manual","source_rel":"Manual/VoidClose.html","md_rel":"text/Manual/VoidClose.md"}` + "\n"
-	if err := os.WriteFile(filepath.Join(corpusDir, "pages.jsonl"), []byte(jsonl), 0o644); err != nil {
-		t.Fatal(err)
-	}
 	writePageTextDB(t, corpusDir, map[string]string{"Manual/VoidClose": md})
 
 	res, err := auditCorpus(sourceDir, corpusDir, 2, fixtureAuditConfig(), nil)
@@ -496,13 +512,13 @@ func TestAuditCorpusMissingSourcePage(t *testing.T) {
 	}
 }
 
-// An unbuilt corpus (no pages.jsonl) must say so instead of surfacing a bare open error.
-func TestAuditCorpusMissingPagesJSONL(t *testing.T) {
+// An unbuilt corpus (no docs.sqlite) must say so instead of surfacing a bare open error.
+func TestAuditCorpusMissingDatabase(t *testing.T) {
 	sourceDir, _ := buildAuditFixture(t)
 	emptyCorpus := t.TempDir()
 	_, err := auditCorpus(sourceDir, emptyCorpus, 1, fixtureAuditConfig(), nil)
 	if err == nil {
-		t.Fatal("missing pages.jsonl must error")
+		t.Fatal("missing docs.sqlite must error")
 	}
 	if !strings.Contains(err.Error(), "is the corpus built") {
 		t.Errorf("error must hint the corpus is unbuilt: %v", err)
@@ -581,24 +597,17 @@ func TestAuditBaselineGatesFixtureRun(t *testing.T) {
 	}
 
 	// Blind-E2E probe replay (findings item 3, upstream variant): remove a page from BOTH
-	// the source tree and pages.jsonl - count parity holds, but the baseline's recorded page
+	// the source tree and pages table - count parity holds, but the baseline's recorded page
 	// count catches the shrink.
 	if err := os.Remove(filepath.Join(sourceDir, "Manual", "Page00.html")); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(filepath.Join(corpusDir, "pages.jsonl"))
-	if err != nil {
+	db := openCorpusDB(t, corpusDir)
+	if _, err := db.Exec("DELETE FROM pages WHERE page_key = ?", "Manual/Page00"); err != nil {
+		db.Close()
 		t.Fatal(err)
 	}
-	var kept []string
-	for _, line := range strings.Split(strings.TrimRight(string(raw), "\n"), "\n") {
-		if !strings.Contains(line, "Page00") {
-			kept = append(kept, line)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(corpusDir, "pages.jsonl"), []byte(strings.Join(kept, "\n")+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	db.Close()
 	res3, err := auditCorpus(sourceDir, corpusDir, 4, fixtureAuditConfig(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -608,20 +617,18 @@ func TestAuditBaselineGatesFixtureRun(t *testing.T) {
 	}
 }
 
-// Blind-E2E probe replay (findings item 3, corpus-side variant): pages.jsonl listing fewer
+// Blind-E2E probe replay (findings item 3, corpus-side variant): the pages table listing fewer
 // pages than the source tree holds is a build regression or a mismatched pair - the audit
 // must refuse rather than certify the smaller set.
 func TestAuditCorpusRefusesPageCountMismatch(t *testing.T) {
 	sourceDir, corpusDir := buildAuditFixture(t)
-	raw, err := os.ReadFile(filepath.Join(corpusDir, "pages.jsonl"))
-	if err != nil {
+	db := openCorpusDB(t, corpusDir)
+	if _, err := db.Exec("DELETE FROM pages WHERE page_key = ?", "Manual/Page11"); err != nil {
+		db.Close()
 		t.Fatal(err)
 	}
-	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
-	if err := os.WriteFile(filepath.Join(corpusDir, "pages.jsonl"), []byte(strings.Join(lines[:len(lines)-1], "\n")+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	_, err = auditCorpus(sourceDir, corpusDir, 2, fixtureAuditConfig(), nil)
+	db.Close()
+	_, err := auditCorpus(sourceDir, corpusDir, 2, fixtureAuditConfig(), nil)
 	if err == nil {
 		t.Fatal("page-count mismatch must refuse the audit")
 	}
@@ -631,60 +638,65 @@ func TestAuditCorpusRefusesPageCountMismatch(t *testing.T) {
 }
 
 func TestAuditCorpusRefusesDuplicatePageReplacingSource(t *testing.T) {
-	sourceDir, corpusDir := buildAuditFixture(t)
-	path := filepath.Join(corpusDir, "pages.jsonl")
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
-	lines[1] = lines[0]
-	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	_, err = auditCorpus(sourceDir, corpusDir, 2, fixtureAuditConfig(), nil)
-	if err == nil || !strings.Contains(err.Error(), "duplicate") {
-		t.Fatalf("duplicate record replacing a real source page must be refused, got: %v", err)
+	_, corpusDir := buildAuditFixture(t)
+	db := openCorpusDB(t, corpusDir)
+	defer db.Close()
+	_, err := db.Exec("UPDATE pages SET source_rel = ? WHERE page_key = ?", "Manual/Page00.html", fixtureTruncated)
+	if err == nil {
+		t.Fatal("duplicate source_rel must be rejected by the pages table")
 	}
 }
 
-func TestAuditCorpusRefusesSwappedMarkdownIdentity(t *testing.T) {
+func TestPagesTableDoesNotStoreDerivableMDRel(t *testing.T) {
 	_, corpusDir := buildAuditFixture(t)
-	path := filepath.Join(corpusDir, "pages.jsonl")
-	raw, err := os.ReadFile(path)
+	db := openCorpusDB(t, corpusDir)
+	defer db.Close()
+	types := map[string]string{}
+	rows, err := db.Query("PRAGMA table_info(pages)")
 	if err != nil {
 		t.Fatal(err)
 	}
-	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
-	var a, b map[string]any
-	if err := json.Unmarshal([]byte(lines[0]), &a); err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal([]byte(lines[1]), &b); err != nil {
-		t.Fatal(err)
-	}
-	a["md_rel"], b["md_rel"] = b["md_rel"], a["md_rel"]
-	for i, rec := range []map[string]any{a, b} {
-		encoded, err := json.Marshal(rec)
-		if err != nil {
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull, pk int
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
 			t.Fatal(err)
 		}
-		lines[i] = string(encoded)
+		if name == "md_rel" {
+			t.Fatal("pages table must not store derivable md_rel")
+		}
+		types[name] = typ
 	}
-	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := loadPageRefs(corpusDir); err == nil || !strings.Contains(err.Error(), "identity mismatch") {
-		t.Fatalf("swapped Markdown paths must be refused, got: %v", err)
+	for _, name := range []string{"source_sha256", "text_sha256"} {
+		if types[name] != "BLOB" {
+			t.Fatalf("pages.%s type = %q, want BLOB", name, types[name])
+		}
+	}
+	var sourceType, textType string
+	var sourceLen, textLen int
+	if err := db.QueryRow("SELECT typeof(source_sha256), length(source_sha256), typeof(text_sha256), length(text_sha256) FROM pages LIMIT 1").Scan(&sourceType, &sourceLen, &textType, &textLen); err != nil {
+		t.Fatal(err)
+	}
+	if sourceType != "blob" || textType != "blob" || sourceLen != 32 || textLen != 32 {
+		t.Fatalf("stored SHA-256 values = %s/%d and %s/%d, want 32-byte BLOBs", sourceType, sourceLen, textType, textLen)
 	}
 }
 
 func TestLoadPageRefsMatchesBuilderMixedCaseExtension(t *testing.T) {
 	corpus := t.TempDir()
-	record := `{"page_key":"Manual/A.HTML","section":"Manual","source_rel":"Manual/A.HTML","md_rel":"text/Manual/A.HTML.md"}` + "\n"
-	if err := os.WriteFile(filepath.Join(corpus, "pages.jsonl"), []byte(record), 0o644); err != nil {
+	writePageTextDB(t, corpus, map[string]string{"Manual/A.HTML": "fixture"})
+	db := openCorpusDB(t, corpus)
+	if _, err := db.Exec("UPDATE pages SET source_rel = ? WHERE page_key = ?", "Manual/A.HTML", "Manual/A.HTML"); err != nil {
+		db.Close()
 		t.Fatal(err)
 	}
+	db.Close()
 	pages, err := loadPageRefs(corpus)
 	if err != nil {
 		t.Fatalf("valid builder identity with mixed-case extension rejected: %v", err)
@@ -694,20 +706,18 @@ func TestLoadPageRefsMatchesBuilderMixedCaseExtension(t *testing.T) {
 	}
 }
 
-// A malformed pages.jsonl record is corpus corruption: silently skipping it would shrink the
-// audited page set, so the audit must error instead.
-func TestAuditCorpusRefusesMalformedPageRecord(t *testing.T) {
+// A malformed pages row is corpus corruption: silently skipping it would shrink the audited
+// page set, so the audit must error instead.
+func TestAuditCorpusRefusesMalformedPageRow(t *testing.T) {
 	_, corpusDir := buildAuditFixture(t)
-	path := filepath.Join(corpusDir, "pages.jsonl")
-	raw, err := os.ReadFile(path)
-	if err != nil {
+	db := openCorpusDB(t, corpusDir)
+	if _, err := db.Exec("UPDATE pages SET source_rel = ? WHERE page_key = ?", "not-a-source-path", "Manual/Page00"); err != nil {
+		db.Close()
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, append(raw, []byte("{not json}\n")...), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := loadPageRefs(filepath.Dir(path)); err == nil || !strings.Contains(err.Error(), "malformed page record") {
-		t.Errorf("malformed record must error with its line, got: %v", err)
+	db.Close()
+	if _, err := loadPageRefs(corpusDir); err == nil || !strings.Contains(err.Error(), "source_rel") {
+		t.Errorf("malformed row must error, got: %v", err)
 	}
 }
 
@@ -740,7 +750,6 @@ func TestAuditRatioGateCatchesBlankedDuplicate(t *testing.T) {
 	}
 	body := strings.Join(shared, " ")
 	mdByKey := map[string]string{}
-	var jsonl strings.Builder
 	for p := 0; p < 5; p++ {
 		name := fmt.Sprintf("Dup%02d", p)
 		html := `<html><body><div id="content-wrap"><p>` + body + `</p></div></body></html>`
@@ -752,12 +761,6 @@ func TestAuditRatioGateCatchesBlankedDuplicate(t *testing.T) {
 			md = "" // the blanked family member
 		}
 		mdByKey["Manual/"+name] = md
-		jsonl.WriteString(fmt.Sprintf(
-			`{"page_key":"Manual/%s","section":"Manual","source_rel":"Manual/%s.html","md_rel":"text/Manual/%s.md"}`+"\n",
-			name, name, name))
-	}
-	if err := os.WriteFile(filepath.Join(corpusDir, "pages.jsonl"), []byte(jsonl.String()), 0o644); err != nil {
-		t.Fatal(err)
 	}
 	writePageTextDB(t, corpusDir, mdByKey)
 	res, err := auditCorpus(sourceDir, corpusDir, 2, fixtureAuditConfig(), nil)

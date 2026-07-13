@@ -1,8 +1,8 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -95,20 +95,33 @@ func TestExtractHTMLTitle(t *testing.T) {
 	}
 }
 
-// generatedCases must sample evenly across the whole (sorted) pages.jsonl, not take its
-// head: pages.jsonl sorts Manual before ScriptReference, so a head slice would test only
+// generatedCases must sample evenly across the whole (sorted) pages table, not take its
+// head: pages sort Manual before ScriptReference, so a head slice would test only
 // Manual pages while the corpus is ~91% ScriptReference.
 func TestGeneratedCasesStrideSampleSpansCorpus(t *testing.T) {
 	dir := t.TempDir()
-	var lines []string
+	db, err := sql.Open("sqlite", filepath.Join(dir, "docs.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec("CREATE TABLE pages (page_key TEXT PRIMARY KEY, section TEXT, source_rel TEXT, title TEXT, page_id TEXT)"); err != nil {
+		t.Fatal(err)
+	}
+	stmt, err := db.Prepare("INSERT INTO pages(page_key, section, source_rel, title, page_id) VALUES (?, ?, ?, ?, ?)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stmt.Close()
 	for i := 0; i < 300; i++ {
-		lines = append(lines, fmt.Sprintf(`{"source_rel":"Manual/page%03d.html","title":"Manual Page %03d","page_id":"page%03d"}`, i, i, i))
+		if _, err := stmt.Exec(fmt.Sprintf("Manual/page%03d", i), "Manual", fmt.Sprintf("Manual/page%03d.html", i), fmt.Sprintf("Manual Page %03d", i), fmt.Sprintf("page%03d", i)); err != nil {
+			t.Fatal(err)
+		}
 	}
 	for i := 0; i < 700; i++ {
-		lines = append(lines, fmt.Sprintf(`{"source_rel":"ScriptReference/Class%03d.html","title":"Class%03d.Member","page_id":"Class%03d"}`, i, i, i))
-	}
-	if err := os.WriteFile(filepath.Join(dir, "pages.jsonl"), []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
-		t.Fatal(err)
+		if _, err := stmt.Exec(fmt.Sprintf("ScriptReference/Class%03d", i), "ScriptReference", fmt.Sprintf("ScriptReference/Class%03d.html", i), fmt.Sprintf("Class%03d.Member", i), fmt.Sprintf("Class%03d", i)); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	cases, err := generatedCases(dir, 100)
