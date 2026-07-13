@@ -142,3 +142,78 @@ concept suite and extended regression suite declined. Production remains one FTS
 If passage retrieval is revisited, use an isolated sidecar plus an explicitly evaluated fusion
 policy instead of perturbing page-level FTS statistics, cap or exclude extreme glossary/changelog
 fan-out, and use a newly held-out query set because this suite has now informed the design.
+
+## Unity query aliases and identifier decomposition - rejected (2026-07-13)
+
+Hypothesis: a small, inspectable query-side Unity terminology map plus decomposition of embedded
+CamelCase and dotted identifiers could bridge vocabulary mismatches without changing the FTS
+index. The candidate kept the existing safe-fill result list as the primary ranker and fused
+each alias variant at one quarter of the primary-list weight. The reviewed candidate map was:
+
+- `asmdef` -> `assembly definition` (Assembly Definition files)
+- `async` -> `asynchronous` (async/await support)
+- `fps` -> `frame rate` (`Application.targetFrameRate`)
+- `uss` -> `ui style sheets` (USS)
+- `uxml` -> `ui markup language` (UXML)
+
+The prototype emitted per-query alias-variant and alias-query counts. It never expanded a bare
+CamelCase or dotted API name, preserving the exact-name `search_index.tsv` path; embedded names
+such as `DontDestroyOnLoad` and `Rigidbody.MovePosition` decomposed only into a separate
+candidate query. Focused tests covered each alias, deterministic decomposition, acronyms, dotted
+names, and exact-name preservation.
+
+| Suite | Safe fill | Alias candidate | Query-work delta |
+| --- | ---: | ---: | ---: |
+| Development concept | 59/100 (Manual 28/50, API 31/50) | 59/100 (Manual 28/50, API 31/50) | 131 -> 136 FTS queries; 5 alias queries |
+| Held-out concept | 44/200 (Manual 31/100, API 13/100) | 44/200 (Manual 31/100, API 13/100) | 508 -> 508 FTS queries; 0 alias queries |
+| Frozen title-derived | 976/1008 | 976/1008 | 1671 -> 1709 FTS queries |
+| Extended body-derived | 9264/10008 | 9264/10008 | 16577 -> 16771 FTS queries |
+
+The development run's p50/p95 changed from 1.025/4.038 ms to 1.535/3.616 ms; benchmark timing
+varied between runs and is not treated as a speed result. This was query-side only, so the index
+size was unchanged. Crucially, the held-out set triggered no aliases and gained no recall. The
+candidate therefore failed the independent improvement gate and was removed; production remains
+the safe-fill policy without aliases or identifier decomposition. Revisit only with independently
+curated terminology cases that exercise a compact, source-backed map.
+
+## Exact-first Porter sidecar fallback - rejected (2026-07-13)
+
+The existing isolated `porter unicode61` corpus was used as an upper-bound secondary signal for
+an exact-first sidecar. It retained the same 39,056 pages and had already passed the content
+audit recorded above, so this evaluation changed no transformed content. The sidecar rule was
+fixed before inspecting held-out outcomes: retain the complete unicode safe-fill list and append
+unseen Porter results only when that primary list has fewer than ten pages. This cannot displace
+an exact unicode result or turn a full primary list into a new ranking policy.
+
+The held-out residuals do not support a morphology fallback:
+
+| Held-out bucket | Cases | Porter recovery under safe append |
+| --- | ---: | ---: |
+| Already recalled by unicode safe fill | 44 | Not applicable |
+| Miss with fewer than 10 unicode safe-fill results | 84 | 0 |
+| Miss with a full 10-result unicode list | 72 | 5 only through re-ranking |
+
+All five Porter-only hits were in full primary lists. A fused or replacement policy would have to
+displace unicode results to expose them, which violates the exact-first requirement. The global
+Porter corpus also lost 22 held-out pages that unicode safe fill recalled. This classifies the
+remaining misses as sparse lexical coverage or dense ranking/semantic mismatch, not a material
+English-inflection failure: no sparse held-out miss was recovered by stemming, and the five dense
+rank changes cannot be attributed to morphology rather than Porter-induced BM25 redistribution.
+
+| Suite | Unicode safe fill | Global Porter safe fill |
+| --- | ---: | ---: |
+| Development concept | 59/100 (Manual 28/50, API 31/50) | 64/100 (Manual 31/50, API 33/50) |
+| Held-out concept | 44/200 (Manual 31/100, API 13/100) | 27/200 (Manual 19/100, API 8/100) |
+| Frozen title-derived | 976/1008 | 974/1008 |
+| Extended body-derived | 9264/10008 | 9098/10008 |
+
+The isolated Porter corpus built in 11.002 s versus 10.715 s for unicode (+2.7%). Its full
+`docs.sqlite` was 115,740,672 bytes versus 117,301,248 bytes for unicode, but that is not a
+sidecar saving: an exact-first sidecar must retain unicode and add a second FTS index. No sidecar
+store was created because the held-out gate failed. Timings varied between runs; Porter p50/p95
+was 0.846/6.010 ms on development, 9.000/79.501 ms on held out, 2.519/10.496 ms on frozen, and
+7.506/15.462 ms on extended. These are diagnostic measurements, not a speed claim.
+
+Production remains the unicode safe-fill index. Revisit only if a newly curated held-out slice
+contains verified inflection-only failures that a safe append can recover without changing the
+unicode top ten.
