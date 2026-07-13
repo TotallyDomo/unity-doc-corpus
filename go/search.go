@@ -81,8 +81,10 @@ func searchCorpus(corpusDir, query string, limit int) ([]searchHit, error) {
 	// bm25 weights: page_key (unindexed), title, body. Title outweighs body 10:1 - measured
 	// on the reference benchmark, unweighted bm25 buries short canonical pages (a bare class
 	// name ranks the class page below its member pages).
+	// pages_fts is contentless (M51-S2): f.page_key is not retrievable, so join on rowid,
+	// which build.go pins equal to the pages rowid. bm25 weights are unchanged.
 	const q = `SELECT p.section, p.page_id, p.title, p.page_key
-FROM pages_fts f JOIN pages p ON p.page_key = f.page_key
+FROM pages_fts f JOIN pages p ON p.rowid = f.rowid
 WHERE pages_fts MATCH ?
 ORDER BY bm25(pages_fts, 0.0, 10.0, 1.0) LIMIT ?`
 	rows, err := db.Query(q, query, limit)

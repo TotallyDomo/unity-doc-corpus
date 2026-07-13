@@ -19,15 +19,21 @@ func buildTestCorpus(t *testing.T, dir string, pages []searchHit, bodies map[str
 	}
 	for _, p := range pages {
 		key := p.Section + "/" + p.PageID
-		if _, err := db.Exec(
+		res, err := db.Exec(
 			"INSERT INTO pages VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			key, p.Section, p.PageID, p.Title, p.PageID+".html", "text/"+key+".md", "", "", "", 0, 0,
-		); err != nil {
+		)
+		if err != nil {
 			t.Fatalf("insert pages: %v", err)
 		}
+		// pages_fts is contentless: pin its rowid to the pages rowid so the rowid join resolves.
+		rowid, err := res.LastInsertId()
+		if err != nil {
+			t.Fatalf("pages LastInsertId: %v", err)
+		}
 		if _, err := db.Exec(
-			"INSERT INTO pages_fts(page_key, title, body) VALUES (?, ?, ?)",
-			key, p.Title, bodies[p.PageID],
+			"INSERT INTO pages_fts(rowid, page_key, title, body) VALUES (?, ?, ?, ?)",
+			rowid, key, p.Title, bodies[p.PageID],
 		); err != nil {
 			t.Fatalf("insert pages_fts: %v", err)
 		}

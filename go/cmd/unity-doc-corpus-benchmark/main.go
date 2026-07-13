@@ -194,7 +194,9 @@ func sqliteHits(corpus, query string) ([]string, time.Duration) {
 	}
 	defer db.Close()
 	terms := tokenize(query, true)
-	rows, err := db.Query("SELECT p.source_rel FROM pages_fts JOIN pages p ON p.page_key = pages_fts.page_key WHERE pages_fts MATCH ? ORDER BY bm25(pages_fts, 0.0, 10.0, 1.0) LIMIT 10", strings.Join(terms, " "))
+	// pages_fts is contentless (M51-S2): join on rowid (pinned equal to the pages rowid at
+	// build), not the non-retrievable page_key column.
+	rows, err := db.Query("SELECT p.source_rel FROM pages_fts JOIN pages p ON p.rowid = pages_fts.rowid WHERE pages_fts MATCH ? ORDER BY bm25(pages_fts, 0.0, 10.0, 1.0) LIMIT 10", strings.Join(terms, " "))
 	if err != nil {
 		return nil, time.Since(start)
 	}
