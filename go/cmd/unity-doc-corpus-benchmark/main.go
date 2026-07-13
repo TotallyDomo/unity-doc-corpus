@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unity-doc-corpus/retrieval"
 
 	_ "modernc.org/sqlite"
 )
@@ -55,16 +56,18 @@ type hit struct {
 }
 
 type caseResult struct {
-	Name        string
-	Expected    string
-	SourceOK    bool
-	DerivedOK   bool
-	SQLiteOK    bool
-	RawFTSOK    bool
-	SourceTime  time.Duration
-	DerivedTime time.Duration
-	SQLiteTime  time.Duration
-	RawFTSTime  time.Duration
+	Name              string
+	Expected          string
+	SourceOK          bool
+	DerivedOK         bool
+	SQLiteOK          bool
+	SQLiteQueries     int
+	VocabularyLookups int
+	RawFTSOK          bool
+	SourceTime        time.Duration
+	DerivedTime       time.Duration
+	SQLiteTime        time.Duration
+	RawFTSTime        time.Duration
 }
 
 var defaultCases = []benchCase{
@@ -200,29 +203,22 @@ func searchDocs(docs []doc, terms []string) ([]hit, time.Duration, int) {
 	return hits, time.Since(start), bytes
 }
 
-func sqliteHits(corpus, query string) ([]string, time.Duration) {
+func sqliteHits(corpus, query string, strategy retrieval.Strategy) ([]string, time.Duration, retrieval.Stats) {
 	start := time.Now()
 	db, err := sql.Open("sqlite", filepath.Join(corpus, "docs.sqlite"))
 	if err != nil {
-		return nil, time.Since(start)
+		return nil, time.Since(start), retrieval.Stats{}
 	}
 	defer db.Close()
-	terms := tokenize(query, true)
-	// pages_fts is contentless (M51-S2): join on rowid (pinned equal to the pages rowid at
-	// build), not the non-retrievable page_key column.
-	rows, err := db.Query("SELECT p.source_rel FROM pages_fts JOIN pages p ON p.rowid = pages_fts.rowid WHERE pages_fts MATCH ? ORDER BY bm25(pages_fts, 0.0, 10.0, 1.0) LIMIT 10", strings.Join(terms, " "))
+	hits, stats, err := retrieval.New(db).Search(query, 10, strategy)
 	if err != nil {
-		return nil, time.Since(start)
+		return nil, time.Since(start), stats
 	}
-	defer rows.Close()
-	var hits []string
-	for rows.Next() {
-		var sourceRel string
-		if rows.Scan(&sourceRel) == nil {
-			hits = append(hits, sourceRel)
-		}
+	paths := make([]string, len(hits))
+	for i, hit := range hits {
+		paths[i] = hit.SourceRel
 	}
-	return hits, time.Since(start)
+	return paths, time.Since(start), stats
 }
 
 var titleRe = regexp.MustCompile(`(?is)<title>(.*?)</title>`)
@@ -471,6 +467,25 @@ func containsString(values []string, expected string) bool {
 	return false
 }
 
+func sqlitePercentile(results []caseResult, percentile float64) float64 {
+	if len(results) == 0 {
+		return 0
+	}
+	latencies := make([]float64, len(results))
+	for i, result := range results {
+		latencies[i] = float64(result.SQLiteTime.Microseconds()) / 1000
+	}
+	sort.Float64s(latencies)
+	index := int(float64(len(latencies))*percentile+0.999999) - 1
+	if index < 0 {
+		index = 0
+	}
+	if index >= len(latencies) {
+		index = len(latencies) - 1
+	}
+	return latencies[index]
+}
+
 func main() {
 	source := flag.String("source", "", "Unity documentation root.")
 	corpus := flag.String("corpus", "", "Agent corpus root.")
@@ -479,9 +494,15 @@ func main() {
 	comparison := flag.Bool("comparison", false, "Run the fixed 1k title-derived, four-lane FTS-vs-grep comparison.")
 	legacyGeneratedCount := flag.Int("generated-cases", 0, "Deprecated compatibility flag; only 1000 is accepted. Use --extended for the fixed 10k tier.")
 	workers := flag.Int("workers", 0, "Worker count for benchmark cases. Defaults to half of logical CPUs.")
+	policy := flag.String("policy", "safe-fill", "Retrieval policy: exact, safe-fill, or fused.")
 	flag.Parse()
 	if *corpus == "" {
 		fmt.Fprintln(os.Stderr, "Usage: unity-doc-corpus-benchmark --corpus <agent-corpus> [--extended | --comparison --source <docs-root>] [--output report.json]")
+		os.Exit(2)
+	}
+	strategy, err := retrieval.ParseStrategy(*policy)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(2)
 	}
 	if *extended && *comparison {
@@ -509,10 +530,7 @@ func main() {
 		generatedLimit = comparisonGeneratedCases
 	}
 	cases := append([]benchCase{}, defaultCases...)
-	var (
-		generated []benchCase
-		err       error
-	)
+	var generated []benchCase
 	if *extended {
 		generated, err = generatedBodyCases(*corpus, generatedLimit)
 	} else {
@@ -562,8 +580,8 @@ func main() {
 			defer wg.Done()
 			for index := range caseCh {
 				c := cases[index]
-				ftsHits, ftsElapsed := sqliteHits(*corpus, c.Query)
-				result := caseResult{Name: c.Name, Expected: c.Expected, SQLiteOK: containsString(ftsHits, c.Expected), SQLiteTime: ftsElapsed}
+				ftsHits, ftsElapsed, ftsStats := sqliteHits(*corpus, c.Query, strategy)
+				result := caseResult{Name: c.Name, Expected: c.Expected, SQLiteOK: containsString(ftsHits, c.Expected), SQLiteQueries: ftsStats.QueryCount, VocabularyLookups: ftsStats.VocabularyLookup, SQLiteTime: ftsElapsed}
 				if mode == comparisonMode {
 					terms := tokenize(c.Query, false)
 					sourceHits, sourceElapsed, _ := searchDocs(sourceDocs, terms)
@@ -587,6 +605,7 @@ func main() {
 	wg.Wait()
 	sourceRecall, derivedRecall, sqliteRecall, rawFTSRecall := 0, 0, 0, 0
 	var sourceSearch, derivedSearch, sqliteSearch, rawFTSSearch time.Duration
+	sqliteQueries, vocabularyLookups := 0, 0
 	var missSamples []map[string]any
 	sectionStats := map[string]map[string]int{}
 	for _, result := range results {
@@ -605,6 +624,8 @@ func main() {
 			stats["sqlite_top10_recall_count"]++
 		}
 		sqliteSearch += result.SQLiteTime
+		sqliteQueries += result.SQLiteQueries
+		vocabularyLookups += result.VocabularyLookups
 		if mode == comparisonMode {
 			if result.SourceOK {
 				sourceRecall++
@@ -638,21 +659,28 @@ func main() {
 	}
 	timings := map[string]float64{
 		"sqlite_search_total": float64(sqliteSearch.Microseconds()) / 1000,
+		"sqlite_search_p50":   sqlitePercentile(results, 0.50),
+		"sqlite_search_p95":   sqlitePercentile(results, 0.95),
 		"total":               float64(time.Since(totalStart).Microseconds()) / 1000,
 	}
 	report := map[string]any{
-		"mode":                      mode,
-		"case_distribution":         distribution,
-		"reference_baseline":        referenceBaseline,
-		"corpus":                    *corpus,
-		"case_count":                len(cases),
-		"default_case_count":        len(defaultCases),
-		"generated_case_count":      len(generated),
-		"sqlite_top10_recall_count": sqliteRecall,
-		"recall_by_section":         sectionStats,
-		"worker_count":              *workers,
-		"timings_ms":                timings,
-		"miss_samples":              missSamples,
+		"mode":                        mode,
+		"case_distribution":           distribution,
+		"reference_baseline":          referenceBaseline,
+		"corpus":                      *corpus,
+		"case_count":                  len(cases),
+		"default_case_count":          len(defaultCases),
+		"generated_case_count":        len(generated),
+		"sqlite_top10_recall_count":   sqliteRecall,
+		"retrieval_policy":            string(strategy),
+		"sqlite_fts_query_count":      sqliteQueries,
+		"sqlite_fts_queries_per_case": float64(sqliteQueries) / float64(len(results)),
+		"vocabulary_lookup_count":     vocabularyLookups,
+		"vocabulary_lookups_per_case": float64(vocabularyLookups) / float64(len(results)),
+		"recall_by_section":           sectionStats,
+		"worker_count":                *workers,
+		"timings_ms":                  timings,
+		"miss_samples":                missSamples,
 	}
 	if mode == comparisonMode {
 		sourceBytes, derivedBytes := 0, 0

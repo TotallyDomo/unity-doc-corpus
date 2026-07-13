@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unity-doc-corpus/retrieval"
 )
 
 // compactText is the text-normalization contract that determines derived corpus body
@@ -353,19 +354,19 @@ func TestWriteSourceHTMLDistinguishesMissingPageFromMissingDocs(t *testing.T) {
 	}
 }
 
-// ftsSanitize is the fallback that keeps dotted API names and stray operators from
-// surfacing FTS5 syntax errors: reduce to alphanumeric terms, drop single characters.
-func TestFtsSanitize(t *testing.T) {
+// Natural-language query normalization keeps dotted API names and stray operators out of
+// FTS5 syntax: use literal alphanumeric terms and drop single characters.
+func TestQueryTerms(t *testing.T) {
 	cases := []struct{ in, want string }{
-		{"Rigidbody.MovePosition", "Rigidbody MovePosition"},
+		{"Rigidbody.MovePosition", "rigidbody moveposition"},
 		{`"addressables memory"`, "addressables memory"},
 		{"ab - cd", "ab cd"},
 		{"a - b", ""},
 		{"---", ""},
 	}
 	for _, c := range cases {
-		if got := ftsSanitize(c.in); got != c.want {
-			t.Errorf("ftsSanitize(%q) = %q, want %q", c.in, got, c.want)
+		if got := strings.Join(retrieval.Terms(c.in), " "); got != c.want {
+			t.Errorf("Terms(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
