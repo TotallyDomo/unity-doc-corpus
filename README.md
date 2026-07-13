@@ -62,6 +62,7 @@ git clone https://github.com/TotallyDomo/unity-doc-corpus
 cd unity-doc-corpus
 go build -C go -trimpath -o ../bin/ .
 go build -C go -trimpath -o ../bin/ ./cmd/unity-doc-corpus-benchmark
+go build -C go -trimpath -o ../bin/ ./cmd/unity-doc-corpus-concept-eval
 ```
 
 Go names the binaries itself (`.exe` included on Windows) and writes them to `bin/`.
@@ -169,6 +170,16 @@ Reproduce the retrieval benchmark with:
 ```
 bin/unity-doc-corpus-benchmark --source unity-docs --corpus unity-docs/_agent --generated-cases 1000
 ```
+
+Measure the separate, hand-curated concept-query suite with per-query hits and misses:
+
+```
+bin/unity-doc-corpus-concept-eval --corpus unity-docs/_agent
+```
+
+The 100 fixed cases in [`docs/concept-queries-6000.3.json`](docs/concept-queries-6000.3.json)
+are agent-style requests with verified gold source pages, balanced between Manual and Scripting
+API coverage. This is intentionally distinct from the benchmark's title-derived sample.
 
 ## Architecture
 
