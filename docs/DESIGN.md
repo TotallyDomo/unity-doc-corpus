@@ -299,8 +299,13 @@ The four lanes form a ranker x representation matrix, and reading it honestly:
   collapses (59-62%) and bm25 holds (~95%).
 - **The title weighting is measured, not aesthetic.** Unweighted bm25 buries short
   canonical pages under their member pages (the class page for a bare class-name query);
-  the 10:1 title:body weighting is worth +0.6 points overall and turned the benchmark's
-  longest-standing curated miss (`script execution order`) into a #1 hit. The
+  the 10:1 title:body weighting is worth +0.6 points overall. It has not fixed the
+  benchmark's longest-standing curated miss: that case's actual query is the 8-term
+  `script execution order event functions update fixedupdate awake`, which still misses
+  top-10 in all four lanes in the checked-in
+  [benchmark-6000.3.json](benchmark-6000.3.json), unchanged since the case was added.
+  That is a longer, harder query than the short `script execution order` phrase used in
+  this repo's own README/skill usage examples - the two should not be conflated. The
   `search_index.tsv` exact-name lane still answers bare API names without the database.
 - **Speed separates FTS from scanning, not the FTS lanes from each other** (~4 ms either
   way once an index exists; a naive scan pays ~207 ms per query against raw HTML).
