@@ -233,8 +233,10 @@ docset ecosystem: [`docs/DESIGN.md`](docs/DESIGN.md).
 ## Legal posture
 
 Unity's documentation belongs to Unity. This repository never contains or redistributes it
-- not in the tree and not in git history. You download the official zip, and the derived
-corpus stays on your machine.
+- not in the tree and not in git history. The builder works from the offline documentation
+zip that Unity itself publishes for local use, fetched from Unity's own hosts. The derived
+corpus is a private retrieval index for your own Unity development: it stays on your
+machine, is not for redistribution, and is not for training or fine-tuning models.
 
 ## Support
 
