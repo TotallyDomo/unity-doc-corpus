@@ -1,0 +1,23 @@
+name: agent-config-guard
+
+# Fails if the repo carries an agent-config-shaped path (CLAUDE.md, AGENTS.md,
+# .claude/, .agents/, MEMORY.md, MCP/settings files) that is not explicitly
+# allowed in .agent-publish-manifest. Guards against agent scratch riding a
+# bulk commit into this public repo (2026-07-19 Netflix metaflow-nflx-extensions
+# CLAUDE.md incident).
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  agent-config-guard:
+    name: agent-config-guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: check for agent-config paths
+        run: bash scripts/agent-config-guard.sh
