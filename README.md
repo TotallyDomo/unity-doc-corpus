@@ -225,7 +225,7 @@ docset ecosystem: [`docs/DESIGN.md`](docs/DESIGN.md).
 - **Pinned audit point**: the annotated `v1.0.1` tag is the fixed release to audit and pin
   (`git clone --branch v1.0.1 https://github.com/TotallyDomo/unity-doc-corpus`); `main`
   moves, the tag does not. Tag names are repointable in principle; the release commit is
-  `PENDING-HASH` - pin that hash for tamper-evidence. (`v1.0.0` was retired 2026-08-02: a
+  `fabacfea03c48586c26a840d6bca69dd6ea6633f` - pin that hash for tamper-evidence. (`v1.0.0` was retired 2026-08-02: a
   history scrub removed an accidentally-committed test-fixture directory that carried
   machine-specific local paths, which changed every commit hash in the repository.)
 - **Content is data**: corpus pages are Unity's documentation text. Agents consuming search
