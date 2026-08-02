@@ -1,0 +1,23 @@
+name: local-path-guard
+
+# Fails if tracked file CONTENT carries an absolute filesystem path out of
+# somebody's machine. Separate from agent-config-guard, which matches path
+# NAMES - that difference is why a validation-artifact directory (Temp/M117)
+# shipped a machine name, account names, and local paths past a green CI in
+# 2026-08.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-path-guard:
+    name: local-path-guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: check for absolute local paths
+        run: python3 scripts/local_path_guard.py
