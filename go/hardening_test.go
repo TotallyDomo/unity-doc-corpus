@@ -205,17 +205,18 @@ func TestSha256HexDeterministic(t *testing.T) {
 	}
 }
 
-// safePrepareOutput is a destructive-operation guard: it may only RemoveAll an existing
-// output directory that carries the builder's own marker file. An unmarked directory must
-// be refused untouched - this is what stops a mistyped --output from nuking real data.
-func TestSafePrepareOutputRefusesUnmarkedDir(t *testing.T) {
-	// Fresh (non-existent) output: created and marked.
+func TestPublicationRefusesUnmarkedDir(t *testing.T) {
 	fresh := filepath.Join(t.TempDir(), "out")
-	if err := safePrepareOutput(fresh); err != nil {
+	p, err := beginPublication(fresh)
+	if err != nil {
 		t.Fatalf("fresh output should succeed: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(fresh, ".unity-doc-agent-corpus")); err != nil {
+	defer p.close()
+	if _, err := os.Stat(filepath.Join(p.stage, corpusMarker)); err != nil {
 		t.Fatalf("marker not written: %v", err)
+	}
+	if _, err := os.Stat(fresh); !os.IsNotExist(err) {
+		t.Fatal("unfinished output must not be visible")
 	}
 
 	// Adversarial poke: an existing dir WITHOUT the marker, holding real data, must be
@@ -225,24 +226,26 @@ func TestSafePrepareOutputRefusesUnmarkedDir(t *testing.T) {
 	if err := os.WriteFile(sentinel, []byte("do not delete"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := safePrepareOutput(unmarked); err == nil {
+	if p, err := beginPublication(unmarked); err == nil {
+		p.close()
 		t.Fatal("expected refusal on unmarked existing directory")
 	}
 	if _, err := os.Stat(sentinel); err != nil {
 		t.Fatalf("guard deleted data it should have refused to touch: %v", err)
 	}
 
-	// A previously-marked dir may be reused (wiped and re-marked).
 	marked := t.TempDir()
 	if err := os.WriteFile(filepath.Join(marked, ".unity-doc-agent-corpus"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := safePrepareOutput(marked); err != nil {
+	p2, err := beginPublication(marked)
+	if err != nil {
 		t.Fatalf("marked dir should be reusable: %v", err)
 	}
+	p2.close()
 }
 
-// prepareFetchDestination mirrors safePrepareOutput's guard for the fetch side:
+// prepareFetchDestination guards replacement on the fetch side:
 // --force may only delete a directory carrying the fetch marker.
 func TestPrepareFetchDestinationRefusesUnmarkedDir(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "docs")

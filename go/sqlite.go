@@ -11,7 +11,9 @@ import (
 
 func createSQLite(path string) (*sql.DB, bool, error) {
 
-	_ = os.Remove(path)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return nil, false, err
+	}
 
 	db, err := sql.Open("sqlite", path)
 
@@ -54,9 +56,8 @@ func createSQLite(path string) (*sql.DB, bool, error) {
 	// unchanged; contentless makes it non-retrievable, so search/benchmark join pages by rowid
 	// (build.go aligns the FTS rowid to the pages rowid) rather than reading f.page_key.
 	if _, err = db.Exec("CREATE VIRTUAL TABLE pages_fts USING fts5(page_key UNINDEXED, title, body, content='')"); err != nil {
-
-		fts5 = false
-
+		db.Close()
+		return nil, false, fmt.Errorf("create FTS5 index: %w", err)
 	}
 	if fts5 {
 		// fts5vocab is metadata only: it exposes document frequencies from pages_fts without

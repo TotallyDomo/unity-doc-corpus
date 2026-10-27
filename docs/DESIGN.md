@@ -106,6 +106,63 @@ retained zip at 452 MiB and the derived corpus at 123 MiB (five files, including
 `docs.sqlite`), for a 575 MiB steady state. Delete the zip too and verification falls back
 to fetching the page's `canonical_url` online.
 
+### Failure-safe rebuild publication
+
+`build` reserves three siblings of its requested output: `<output>.staging`,
+`<output>.previous`, and a persistent `<output>.build.lock` file. One process holds
+an OS writer lock for recovery, transformation, publication, and source pruning.
+The lock is released by process exit; the file itself must not be removed while
+builders may be running. This serializes writers to the same canonical output,
+not readers or independent outputs. Do not concurrently prune a shared source
+from different-output builders; use `--keep-source` for that workflow.
+
+The previous output is untouched during transformation. At most one staging
+generation and one previous generation are owned for an output. TSV writes,
+buffer flush and file close, SQLite statement closes, transaction commit and
+database close, and metadata writes must all succeed before publication. FTS5
+schema errors fail the build rather than silently publishing a degraded index.
+The corpus marker records its output owner and is stamped complete only after all
+artifacts close successfully; a stage belonging to another output is refused.
+
+Publication parks the old marked directory at `.previous`, then renames the
+complete stage into the requested path, then removes `.previous`. No files are
+merged into a live corpus. A failed installation attempts to restore `.previous`;
+if restoration also fails, the old bytes remain there and the error names the
+recovery path. Success output and source pruning occur only after publication
+and retirement finish. The source zip is never removed by `build`.
+
+Run the same `build --source ... --output ...` command to recover an interrupted
+process before rebuilding:
+
+| Observed state | Recovery under the writer lock |
+| --- | --- |
+| Output present; only abandoned stage | Keep output, discard marked stage |
+| Output absent; previous present | Restore previous, discard marked stage |
+| Complete output and previous present | Keep new output, retire previous |
+| No output or previous; stage present | Discard marked stage and rebuild from source |
+| Unmarked/linked directory, or ambiguous output plus previous | Refuse without deleting those directories; inspect the named paths |
+
+The requested output retains its existing artifact layout and marker filename;
+legacy marked corpora remain replaceable. Unmarked output and reserved sibling
+directories are never adopted or cleared. Outputs containing the source, or
+inside its prunable section trees, are refused. A crash between creating a stage
+directory and writing its marker can leave an empty unmarked stage: inspect it
+with no builder running and remove only that known-empty directory before retry.
+
+This is process-interruption recovery, **not** a portable atomic directory swap
+or a power-loss durability guarantee. The two renames leave a short interval with
+no output at the requested path; readers may fail and retry, and multiple lookup
+commands are not a single generation-pinned session. A reader can use `.previous`
+while recovering, but must not mutate it. Filesystem/device failures can require
+manual recovery. On Windows, open handles without delete sharing can refuse the
+old-directory rename; that failure leaves the old generation intact. A POSIX
+reader can retain the old inode where the filesystem permits open-file renames;
+WSL's Windows-backed mounts can instead refuse until that reader closes. The
+native tests verify either retained old-handle bytes or unchanged last-good output
+on refusal followed by successful publication after closing the reader. They also
+exercise subprocess termination at each rename boundary, without establishing
+universal filesystem or sudden-power-loss behavior.
+
 ### HTML transform
 
 The parser (`go/html_parser.go`) is a single-pass tag scanner written for Unity's
