@@ -15,20 +15,33 @@ import (
 // quality: collapse intra-line whitespace to single spaces, drop spaces around newlines,
 // cap blank-line runs at two, unescape entities, normalize CR/CRLF, trim the ends.
 func TestCompactTextNormalization(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{"a    b", "a b"},
-		{"a\t\tb", "a b"},
-		{"  hello  ", "hello"},
-		{"a\r\nb", "a\nb"},
-		{"a &amp; b", "a & b"},
-		{"a   \nb", "a\nb"},      // trailing spaces before newline dropped
-		{"a\n   b", "a\nb"},      // leading spaces after newline dropped
-		{"a\n\n\n\nb", "a\n\nb"}, // blank-line run capped at 2
+	cases := []struct{ name, in, want string }{
+		{"spaces", "a    b", "a b"},
+		{"tabs", "a\t\tb", "a b"},
+		{"trim", "  hello  ", "hello"},
+		{"crlf", "a\r\nb", "a\nb"},
+		{"entity", "a &amp; b", "a & b"},
+		{"before-newline", "a   \nb", "a\nb"},
+		{"after-newline", "a\n   b", "a\nb"},
+		{"newline-limit", "a\n\n\n\nb", "a\n\nb"},
+		{"empty", "", ""},
+		{"only-whitespace", " \t\f\v\r\n \r \n", ""},
+		{"all-horizontal-whitespace", "a \t\f\vb", "a b"},
+		{"cr-and-crlf", "a\rb\r\nc\r\r\nd", "a\nb\nc\n\nd"},
+		{"spaced-blank-lines", " \n a \n \t\n\f \n b \n ", "a\n\nb"},
+		{"two-newlines", "a \n \n b", "a\n\nb"},
+		{"one-pass-entities", "&amp;lt; &#32;&#9;a&#13;&#10;b", "&lt; a\nb"},
+		{"unicode-spaces", "\u00a0a\u2003 \n\u00a0b\u2003", "\u00a0a\u2003\n\u00a0b\u2003"},
+		{"unicode-text", " \u017d\u4e16\U0001f642 \n \u0301 ", "\u017d\u4e16\U0001f642\n\u0301"},
+		{"invalid-utf8", "a\xff \n\xc0b", "a\ufffd\n\ufffdb"},
+		{"nul", "a\x00 \n b", "a\x00\nb"},
 	}
 	for _, c := range cases {
-		if got := compactText(c.in); got != c.want {
-			t.Errorf("compactText(%q) = %q, want %q", c.in, got, c.want)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			if got := compactText(c.in); got != c.want {
+				t.Errorf("compactText(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
 	}
 }
 
