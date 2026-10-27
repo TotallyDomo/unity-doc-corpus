@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -10,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -186,32 +186,12 @@ func buildWithIO(source, output string, workers int, keepSource bool, deps build
 			jobs = append(jobs, transformJob{Index: len(jobs), Section: section, Path: path})
 		}
 	}
-	results := make([]transformResult, len(jobs))
-	jobCh := make(chan transformJob)
-	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for job := range jobCh {
-				results[job.Index] = transformOne(sourceAbs, titles, job, timer, deps.readFile)
-			}
-		}()
-	}
-	for _, job := range jobs {
-		jobCh <- job
-	}
-	close(jobCh)
-	wg.Wait()
-
 	pageCount := 0
 	totalSourceBytes := 0
 	totalTextBytes := 0
-	for _, result := range results {
-		if result.Err != nil {
-			return result.Err
-		}
-		rec := result.Record
+	err = transformOrdered(context.Background(), jobs, workers, func(job transformJob) transformResult {
+		return transformOne(sourceAbs, titles, job, timer, deps.readFile)
+	}, func(rec record) error {
 		if err := timer.measure("write_tsv", func() error {
 			_, err := fmt.Fprintf(searchWriter, "%s\t%s\t%s\t%s\t%s\t%s\n", rec.PageKey, rec.Section, rec.PageID, strings.ReplaceAll(rec.Title, "\t", " "), rec.SourceRel, rec.CanonicalURL)
 			return err
@@ -243,6 +223,10 @@ func buildWithIO(source, output string, workers int, keepSource bool, deps build
 		pageCount++
 		totalSourceBytes += rec.SourceBytes
 		totalTextBytes += rec.TextBytes
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	if err := searchWriter.Flush(); err != nil {
 		return fmt.Errorf("flush TSV: %w", err)
