@@ -107,33 +107,12 @@ func compactText(value string) string {
 
 	for i := 0; i < len(value); i++ {
 
-		if value[i] == '\n' {
-
-			s := b.String()
-
-			for strings.HasSuffix(s, " ") {
-
-				s = strings.TrimSuffix(s, " ")
-
-			}
-
-			b.Reset()
-
-			b.WriteString(s)
-
-			b.WriteByte('\n')
-
-			for i+1 < len(value) && value[i+1] == ' ' {
-
-				i++
-
-			}
-
-		} else {
-
-			b.WriteByte(value[i])
-
+		// INVARIANT: The first pass leaves at most one ASCII space between non-space bytes.
+		if value[i] == ' ' && ((i > 0 && value[i-1] == '\n') || (i+1 < len(value) && value[i+1] == '\n')) {
+			continue
 		}
+
+		b.WriteByte(value[i])
 
 	}
 
