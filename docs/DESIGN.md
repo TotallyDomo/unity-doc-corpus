@@ -90,6 +90,17 @@ loop back to the original bytes.
    builds of the same zip preserve page order and produce the same rendered page payloads
    and `search_index.tsv`.
 
+   Transformation and insertion overlap through a bounded ordered window: at most
+   twice the worker count of pages are admitted but not yet consumed. A slow early
+   page applies backpressure rather than allowing later results to accumulate for
+   the whole corpus. Only lightweight job paths and title maps remain corpus-sized;
+   page bodies and rendered Markdown are released after ordered insertion. This is
+   a page-count bound, not a byte cap on unusually large individual pages. Transform
+   or output failure stops admission and joins workers before staging cleanup.
+   Cancellation likewise joins already-running transforms; it does not interrupt
+   an underlying file read. The CLI retains its existing process-interruption and
+   next-build publication-recovery behavior.
+
 ### Artifact lifecycle
 
 The retained zip is the ground-truth artifact; the extracted HTML tree is a disposable
